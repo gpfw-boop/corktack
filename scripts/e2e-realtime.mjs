@@ -134,8 +134,8 @@ try {
   const reopenTime = await within(5000, () => shown(b))
   check(`reopen reaches the second browser${reopenTime != null ? ` (${reopenTime} ms)` : ''}`, reopenTime != null)
 
-  // B deletes A's comment from the menu: anyone can tidy up.
-  await openNewest(b)
+  // B deletes A's comment from the menu: anyone can tidy up. B's thread is still open from replying.
+  if (!(await inOverlay(b, (root) => !!root.querySelector('ct-thread')))) await openNewest(b)
   await sleep(300)
   await inOverlay(b, (root) => root.querySelector('ct-thread').shadowRoot.querySelector('[aria-label="More options"]').click())
   await sleep(100)
