@@ -123,6 +123,14 @@ export class CorktackOverlay extends LitElement {
     this.teardown.push(() => pageStyle.remove())
 
     this.listen()
+
+    // Keep the widget's own focus and presses from reaching the page. Drawers and dialogs often
+    // trap focus or close on an outside press by listening on the document, and the widget sits
+    // outside them, so typing in a comment would otherwise pull focus back or close the drawer.
+    for (const type of ['focusin', 'focusout', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'touchstart', 'touchend']) {
+      this.on(this, type, (e) => e.stopPropagation())
+    }
+
     const unsubscribe = this.config.adapter.subscribe?.(this.config.project, () => void this.reload())
     if (unsubscribe) this.teardown.push(unsubscribe)
 
@@ -202,6 +210,9 @@ export class CorktackOverlay extends LitElement {
     const schedule = () => this.schedule()
     this.on(window, 'scroll', schedule, { capture: true, passive: true })
     this.on(window, 'resize', schedule)
+    // Drawers and menus slide in without changing the page structure, so measure again once they settle.
+    this.on(document, 'transitionend', schedule, { capture: true })
+    this.on(document, 'animationend', schedule, { capture: true })
     this.on(window, 'corktack:navigate', () => {
       // Routers also call replaceState without changing page; keep the card open then.
       const route = this.config.getRoute()
@@ -533,7 +544,11 @@ export class CorktackOverlay extends LitElement {
     for (const c of all) if (c.route !== route) elsewhere.set(c.route, [...(elsewhere.get(c.route) ?? []), c])
     return [
       { title: null, items: here.filter((c) => this.positions.get(c.id)) },
-      { title: 'Couldn’t place on this page', items: here.filter((c) => this.positions.has(c.id) && !this.positions.get(c.id)) },
+      {
+        title: 'Not visible right now',
+        note: 'These may be inside something that’s closed, like a drawer or menu.',
+        items: here.filter((c) => this.positions.has(c.id) && !this.positions.get(c.id)),
+      },
       // Threads are newest first, so each page's first item is its latest comment.
       ...[...elsewhere].map(([page, items]) => ({ title: page === '/' || page.endsWith('#/') ? 'Home' : page, items })),
     ]

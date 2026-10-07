@@ -10,6 +10,23 @@
     main { max-width: 720px; margin: 32px auto; padding: 0 24px; }
     .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
     button.cta { padding: 10px 16px; border-radius: 6px; border: 0; background: #1f5f4a; color: #fff; }
+    .anchor { position: relative; }
+    .popover {
+      position: absolute; top: calc(100% + 8px); left: 0; z-index: 10; width: 260px; padding: 16px;
+      background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+      transition: transform 200ms ease-out, opacity 200ms ease-out;
+    }
+    .popover.entering { transform: translateY(-12px); opacity: 0; }
+    .popover h3 { margin: 0 0 8px; }
+    .popover label { display: block; margin-top: 8px; font-size: 14px; }
+    .backdrop { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.3); }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; z-index: 21; width: min(380px, 90vw); padding: 24px;
+      background: #fff; box-shadow: -8px 0 24px rgb(0 0 0 / 0.15); overflow-y: auto;
+      transition: transform 250ms ease-out;
+    }
+    .drawer.entering { transform: translateX(100%); }
+    .drawer textarea { width: 100%; min-height: 80px; font: inherit; }
   </style>
 </head>
 <body>
@@ -28,7 +45,9 @@
             <button class="cta" data-feedback="confirm-roster">Confirm roster</button></div>
             <div class="card" data-v-3f2a9c1b><h2>Messages</h2><p>Two families have replied to the newsletter.</p></div>`,
       '/roster': `<h1 data-v-8812aa0e>Roster</h1>
-            <div class="card"><p>Monday: Sam, Alex, Jordan</p><p>Tuesday: Sam, Riley</p></div>`,
+            <div class="card"><p>Monday: Sam, Alex, Jordan</p><p>Tuesday: Sam, Riley</p>
+            <div class="anchor"><button class="cta" id="edit-shift">Edit Tuesday</button>
+            <button class="cta" id="open-drawer">Shift notes</button></div></div>`,
     }
     const render = () => (document.getElementById('app').innerHTML = pages[location.pathname] ?? pages['/'])
     document.addEventListener('click', (e) => {
@@ -40,6 +59,61 @@
     })
     window.addEventListener('popstate', render)
     render()
+
+    // A small non-modal dialog, like most component libraries: it slides in, closes on Esc or a
+    // press outside it, and is removed from the page when closed (like Vue's v-if).
+    let popover = null
+    const closePopover = () => {
+      popover?.remove()
+      popover = null
+    }
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#edit-shift') || popover?.isConnected) return
+      popover = document.createElement('div')
+      popover.className = 'popover entering'
+      popover.setAttribute('role', 'dialog')
+      popover.innerHTML = `<h3>Tuesday</h3><p>Sam, Riley</p>
+        <label><input type="checkbox" checked> Sam</label><label><input type="checkbox" checked> Riley</label>
+        <label><input type="checkbox"> Jordan</label>`
+      e.target.closest('.anchor').append(popover)
+      requestAnimationFrame(() => requestAnimationFrame(() => popover?.classList.remove('entering')))
+    })
+    document.addEventListener('pointerdown', (e) => {
+      if (popover && !popover.contains(e.target) && !e.target.closest('#edit-shift')) closePopover()
+    })
+    document.addEventListener('keydown', (e) => e.key === 'Escape' && closePopover())
+    window.addEventListener('popstate', closePopover)
+
+    // A hand-rolled modal side drawer: dims the page, slides in, and traps focus by pulling it back
+    // whenever it lands outside the drawer. Closes on Esc or a press on the backdrop.
+    let drawer = null
+    const closeDrawer = () => {
+      drawer?.backdrop.remove()
+      drawer?.panel.remove()
+      drawer = null
+    }
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#open-drawer') || drawer) return
+      const backdrop = document.createElement('div')
+      backdrop.className = 'backdrop'
+      backdrop.addEventListener('pointerdown', closeDrawer)
+      const panel = document.createElement('aside')
+      panel.className = 'drawer entering'
+      panel.setAttribute('role', 'dialog')
+      panel.setAttribute('aria-modal', 'true')
+      panel.setAttribute('aria-label', 'Shift notes')
+      panel.innerHTML = `<h2>Shift notes</h2><p>Tuesday is short one educator after 2pm.</p>
+        <label>Note for the team<textarea></textarea></label><p><button class="cta" id="save-notes">Save notes</button></p>`
+      document.body.append(backdrop, panel)
+      drawer = { backdrop, panel }
+      panel.querySelector('textarea').focus()
+      requestAnimationFrame(() => requestAnimationFrame(() => panel.classList.remove('entering')))
+    })
+    document.addEventListener('focusin', (e) => {
+      if (drawer && !drawer.panel.contains(e.target)) drawer.panel.querySelector('textarea').focus()
+    })
+    document.addEventListener('keydown', (e) => e.key === 'Escape' && closeDrawer())
+    window.addEventListener('popstate', closeDrawer)
 
     // Shared and live with Supabase when .env.local has the keys, otherwise this browser only.
     const url = import.meta.env.VITE_SUPABASE_URL

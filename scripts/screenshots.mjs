@@ -157,7 +157,7 @@ await shot('01-pins')
   await shot('07-sidebar-resolved')
   await toggle.click()
   const unplaced = await (await overlay()).evaluateHandle((root) =>
-    [...root.querySelector('ct-sidebar').shadowRoot.querySelectorAll('h3')].find((h) => h.textContent.startsWith('Couldn')).nextElementSibling.querySelector('.item'))
+    [...root.querySelector('ct-sidebar').shadowRoot.querySelectorAll('h3')].find((h) => h.textContent.startsWith('Not visible')).nextElementSibling.nextElementSibling.querySelector('.item'))
   await unplaced.click()
   await shot('08-unplaced-centred')
   await page.keyboard.press('Escape')
