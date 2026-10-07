@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Corktack demo</title>
+  <style>
+    body { margin: 0; font-family: Georgia, serif; background: #f6f6f2; color: #222; }
+    nav { display: flex; gap: 8px; padding: 16px 24px; background: #fff; border-bottom: 1px solid #ddd; }
+    main { max-width: 720px; margin: 32px auto; padding: 0 24px; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    button.cta { padding: 10px 16px; border-radius: 6px; border: 0; background: #1f5f4a; color: #fff; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" data-link>Home</a>
+    <a href="/roster" data-link>Roster</a>
+  </nav>
+  <main id="app"></main>
+  <script type="module">
+    import { initFeedback, supabaseAdapter } from '../src/index.ts'
+
+    // A tiny fake SPA, with Vue-style scoped attributes, to show anchoring.
+    const pages = {
+      '/': `<h1 data-v-3f2a9c1b>Welcome back, Priya</h1>
+            <div class="card" data-v-3f2a9c1b><h2>Today</h2><p>Three educators are rostered for the Joeys room.</p>
+            <button class="cta" data-feedback="confirm-roster">Confirm roster</button></div>
+            <div class="card" data-v-3f2a9c1b><h2>Messages</h2><p>Two families have replied to the newsletter.</p></div>`,
+      '/roster': `<h1 data-v-8812aa0e>Roster</h1>
+            <div class="card"><p>Monday: Sam, Alex, Jordan</p><p>Tuesday: Sam, Riley</p></div>`,
+    }
+    const render = () => (document.getElementById('app').innerHTML = pages[location.pathname] ?? pages['/'])
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-link]')
+      if (!a) return
+      e.preventDefault()
+      history.pushState({}, '', a.getAttribute('href'))
+      render()
+    })
+    window.addEventListener('popstate', render)
+    render()
+
+    // Shared and live with Supabase when .env.local has the keys, otherwise this browser only.
+    const url = import.meta.env.VITE_SUPABASE_URL
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    initFeedback({
+      project: 'corktack-demo',
+      adapter: url && anonKey ? supabaseAdapter({ url, anonKey }) : undefined,
+    })
+  </script>
+</body>
+</html>
