@@ -26,7 +26,6 @@
   "files": [
     "dist"
   ],
-  "sideEffects": false,
   "scripts": {
     "dev": "vite --config demo/vite.config.ts",
     "build": "vite build && tsc --emitDeclarationOnly && node scripts/size.mjs",
