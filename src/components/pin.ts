@@ -6,7 +6,8 @@ import { define, initials, plural } from '../util'
 /**
  * A teardrop avatar whose pointed corner sits exactly on the anchored point.
  * The host is a zero-size box placed at that point; the pin grows up and to
- * the right from it. On hover or focus it opens into a compact preview.
+ * the right from it. On hover or focus it opens into a compact preview,
+ * except while its thread is open.
  *
  * Set `--c` (avatar colour) and `--room` (space to the right edge) on the host.
  */
@@ -79,7 +80,7 @@ export class CtPin extends LitElement {
     const replies = this.replies ? plural(this.replies, 'reply', 'replies') : ''
     return html`
       <button
-        class="pin preview"
+        class=${this.active ? 'pin' : 'pin preview'}
         aria-label=${`${this.author}: ${firstLine}${replies ? `, ${replies}` : ''}`}
         aria-expanded=${String(this.active)}
       >

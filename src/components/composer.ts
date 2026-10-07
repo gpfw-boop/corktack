@@ -46,6 +46,7 @@ export class CtComposer extends LitElement {
         height: 28px;
         max-height: 160px;
         padding: 5px 0;
+        overflow-y: hidden;
         border: 0;
         outline: none;
         resize: none;
@@ -83,6 +84,8 @@ export class CtComposer extends LitElement {
     const el = this.textarea
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+    // Only scroll once the text outgrows the field, or a one-line field shows a scrollbar.
+    el.style.overflowY = el.scrollHeight > 160 ? 'auto' : 'hidden'
   }
 
   private async submit(): Promise<void> {
