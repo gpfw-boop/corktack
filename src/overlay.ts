@@ -3,11 +3,12 @@ import { state } from 'lit/decorators.js'
 import { repeat } from 'lit/directives/repeat.js'
 import { styleMap } from 'lit/directives/style-map.js'
 import { createAnchor, findElement, pointFor } from './anchor'
-import { deleteToken, ownership, reviewerName } from './identity'
+import { reviewerName } from './identity'
 import { base, pageCss, tokens } from './styles'
 import type { Anchor, FeedbackComment, StorageAdapter } from './types'
 import { avatarColour, define } from './util'
 import type { CtComposer } from './components/composer'
+import type { SidebarSection } from './components/sidebar'
 import type { CtThread } from './components/thread'
 import type { ToolbarAction } from './components/toolbar'
 import './components/composer'
@@ -18,6 +19,8 @@ import './components/toolbar'
 
 export interface OverlayConfig {
   project: string
+  /** The query parameter that turns feedback on, used in comment links. */
+  param: string
   adapter: StorageAdapter
   hookAttribute: string
   getRoute: () => string
@@ -33,6 +36,10 @@ type Card =
 
 const SIDEBAR_WIDTH = 320
 const NARROW = 640
+/** Query parameter in comment links. */
+const COMMENT_PARAM = 'comment'
+/** How long to wait for another page to render before opening a comment on it. */
+const PENDING_MS = 2000
 
 const isTopLevel = (c: FeedbackComment): c is TopLevel => c.parentId === null && c.anchor !== null
 
@@ -55,6 +62,7 @@ export class CorktackOverlay extends LitElement {
   @state() private commenting = false
   @state() private visible = true
   @state() private listOpen = false
+  @state() private showResolved = false
   @state() private card: Card = { kind: 'none' }
   @state() private now = Date.now()
 
@@ -65,6 +73,13 @@ export class CorktackOverlay extends LitElement {
   private frame = 0
   private mutationTimer = 0
   private teardown: Array<() => void> = []
+  private lastRoute = ''
+  /**
+   * A comment to open once its page has rendered: from a comment link, or
+   * after choosing a comment on another page in the list. `fallback` is the
+   * link to load if the page never shows it, for sites that aren't single-page apps.
+   */
+  private pending: { id: string; until: number; fallback: string | null } | null = null
 
   static styles = [
     tokens,
@@ -120,7 +135,12 @@ export class CorktackOverlay extends LitElement {
       if (document.visibilityState === 'visible') void this.reload()
     })
 
-    void this.reload()
+    this.lastRoute = this.config.getRoute()
+    // A comment link: open that comment once comments have loaded and its page has rendered.
+    const linked = new URLSearchParams(window.location.search).get(COMMENT_PARAM)
+    void this.reload().then(() => {
+      if (linked) this.wait(linked, null)
+    })
   }
 
   disconnectedCallback(): void {
@@ -183,6 +203,10 @@ export class CorktackOverlay extends LitElement {
     this.on(window, 'scroll', schedule, { capture: true, passive: true })
     this.on(window, 'resize', schedule)
     this.on(window, 'corktack:navigate', () => {
+      // Routers also call replaceState without changing page; keep the card open then.
+      const route = this.config.getRoute()
+      if (route === this.lastRoute) return
+      this.lastRoute = route
       this.elementCache.clear()
       this.card = { kind: 'none' }
       this.schedule()
@@ -239,9 +263,7 @@ export class CorktackOverlay extends LitElement {
       body,
       anchor: parentId ? null : compose!.anchor,
       viewportWidth: parentId ? null : window.innerWidth,
-      deleteToken: deleteToken(),
     })
-    ownership.add(created.id)
     // Realtime may already have delivered it.
     if (!this.comments.some((c) => c.id === created.id)) this.comments = [...this.comments, created]
     if (compose) {
@@ -252,12 +274,34 @@ export class CorktackOverlay extends LitElement {
 
   private async deleteComment(id: string): Promise<void> {
     try {
-      await this.config.adapter.remove(id, deleteToken())
+      await this.config.adapter.remove(id)
     } catch (e) {
       console.warn('[corktack] Could not delete comment', e)
     }
     if (this.card.kind === 'thread' && this.card.id === id) this.card = { kind: 'none' }
     await this.reload()
+  }
+
+  private async setResolved(id: string, resolved: boolean): Promise<void> {
+    // Resolving closes the thread, as it's done with. Reopening keeps it open.
+    if (resolved && !this.showResolved) this.card = { kind: 'none' }
+    const resolvedAt = resolved ? new Date().toISOString() : null
+    this.comments = this.comments.map((c) => (c.id === id ? { ...c, resolvedAt } : c))
+    try {
+      await this.config.adapter.setResolved(id, resolved)
+    } catch (e) {
+      console.warn('[corktack] Could not resolve comment', e)
+    }
+    await this.reload()
+  }
+
+  /** A link that opens the prototype at this comment. */
+  private commentLink(c: FeedbackComment): string {
+    const hashAt = c.route.indexOf('#')
+    const url = new URL(hashAt < 0 ? c.route : c.route.slice(0, hashAt), window.location.origin)
+    url.searchParams.set(this.config.param, '1')
+    url.searchParams.set(COMMENT_PARAM, c.id)
+    return url.href + (hashAt < 0 ? '' : c.route.slice(hashAt))
   }
 
   // ---------------------------------------------------------------- state changes
@@ -294,11 +338,61 @@ export class CorktackOverlay extends LitElement {
   private select(id: string): void {
     const c = this.threads().find((t) => t.id === id)
     if (!c) return
+    if (c.route !== this.config.getRoute()) {
+      this.goTo(c.route)
+      this.wait(id, this.commentLink(c))
+      if (window.innerWidth < NARROW) this.listOpen = false
+      return
+    }
     const el = this.positions.get(id) ? this.resolve(c) : null
     el?.scrollIntoView({ block: 'center', behavior: scrollBehaviour() })
     this.visible = true
     this.card = { kind: 'thread', id }
     if (window.innerWidth < NARROW) this.listOpen = false
+  }
+
+  /** Moves to another page without a reload, the way the prototype's own router would. */
+  private goTo(route: string): void {
+    const hashAt = route.indexOf('#')
+    const path = hashAt < 0 ? route : route.slice(0, hashAt)
+    if (hashAt >= 0 && path === window.location.pathname) {
+      window.location.hash = route.slice(hashAt)
+      return
+    }
+    history.pushState(null, '', route)
+    // Vue Router, React Router and others follow popstate.
+    window.dispatchEvent(new PopStateEvent('popstate', { state: null }))
+  }
+
+  /** Opens a comment once its element appears, or after a short wait if it never does. */
+  private wait(id: string, fallback: string | null): void {
+    this.pending = { id, until: Date.now() + PENDING_MS, fallback }
+    this.schedule()
+    // Measuring only runs when something changes, so check once more after the wait.
+    window.setTimeout(() => this.schedule(), PENDING_MS + 50)
+  }
+
+  private openPending(): void {
+    const pending = this.pending
+    if (!pending) return
+    const c = this.threads().find((t) => t.id === pending.id)
+    if (!c) {
+      if (Date.now() > pending.until) this.pending = null
+      return
+    }
+    if (c.route !== this.config.getRoute()) {
+      if (Date.now() > pending.until) this.pending = null
+      return
+    }
+    if (!this.positions.get(c.id) && Date.now() <= pending.until) return
+    this.pending = null
+    // The router changed the address but not the page: load the link instead.
+    if (!this.positions.get(c.id) && pending.fallback) {
+      window.location.assign(pending.fallback)
+      return
+    }
+    if (c.resolvedAt) this.showResolved = true
+    this.select(c.id)
   }
 
   // ---------------------------------------------------------------- measuring
@@ -319,6 +413,7 @@ export class CorktackOverlay extends LitElement {
     this.positions = next
     this.draftPoint = this.card.kind === 'compose' ? pointFor(this.card.el, this.card.anchor) : null
     this.requestUpdate()
+    this.openPending()
   }
 
   protected willUpdate(changed: PropertyValues<this>): void {
@@ -380,7 +475,7 @@ export class CorktackOverlay extends LitElement {
 
   private renderPins(threads: TopLevel[]) {
     const activeId = this.card.kind === 'thread' ? this.card.id : null
-    const placed = threads.filter((c) => this.positions.get(c.id))
+    const placed = threads.filter((c) => this.positions.get(c.id) && (this.showResolved || !c.resolvedAt))
     return html`
       ${repeat(placed, (c) => c.id, (c) => {
         const p = this.positions.get(c.id)!
@@ -390,6 +485,7 @@ export class CorktackOverlay extends LitElement {
           .body=${c.body}
           .replies=${this.replies(c.id).length}
           ?active=${activeId === c.id}
+          ?resolved=${!!c.resolvedAt}
           @click=${() => this.toggleThread(c.id)}
         ></ct-pin>`
       })}
@@ -417,33 +513,51 @@ export class CorktackOverlay extends LitElement {
         <ct-thread
           .comment=${c}
           .replies=${this.replies(c.id)}
-          .ownIds=${new Set(this.comments.filter((x) => ownership.has(x.id)).map((x) => x.id))}
           .now=${this.now}
+          .link=${this.commentLink(c)}
           .onReply=${(name: string, body: string) => this.post(name, body, c.id)}
           @ct-close=${() => (this.card = { kind: 'none' })}
           @ct-delete=${(e: CustomEvent<{ id: string }>) => void this.deleteComment(e.detail.id)}
+          @ct-resolve=${(e: CustomEvent<{ id: string; resolved: boolean }>) => void this.setResolved(e.detail.id, e.detail.resolved)}
         ></ct-thread>
       </div>`
     }
     return nothing
   }
 
+  /** This page's comments, those that couldn't be placed, then other pages by their latest comment. */
+  private sections(route: string): SidebarSection[] {
+    const all = this.threads().filter((c) => this.showResolved || !c.resolvedAt)
+    const here = all.filter((c) => c.route === route)
+    const elsewhere = new Map<string, TopLevel[]>()
+    for (const c of all) if (c.route !== route) elsewhere.set(c.route, [...(elsewhere.get(c.route) ?? []), c])
+    return [
+      { title: null, items: here.filter((c) => this.positions.get(c.id)) },
+      { title: 'Couldn’t place on this page', items: here.filter((c) => this.positions.has(c.id) && !this.positions.get(c.id)) },
+      // Threads are newest first, so each page's first item is its latest comment.
+      ...[...elsewhere].map(([page, items]) => ({ title: page === '/' || page.endsWith('#/') ? 'Home' : page, items })),
+    ]
+  }
+
   render() {
     const route = this.config.getRoute()
     const threads = this.threads().filter((c) => c.route === route)
-    const replyCounts = new Map(threads.map((c) => [c.id, this.replies(c.id).length]))
+    const replyCounts = new Map(this.threads().map((c) => [c.id, this.replies(c.id).length]))
 
     return html`
       <div class="layer">${this.visible ? this.renderPins(threads) : nothing}</div>
       ${this.listOpen
         ? html`<ct-sidebar
-            .placed=${threads.filter((c) => this.positions.get(c.id))}
-            .unplaced=${threads.filter((c) => this.positions.has(c.id) && !this.positions.get(c.id))}
+            .sections=${this.sections(route)}
+            ?pageEmpty=${!threads.some((c) => this.showResolved || !c.resolvedAt)}
+            .resolvedCount=${this.threads().filter((c) => c.resolvedAt).length}
+            ?showResolved=${this.showResolved}
             .replyCounts=${replyCounts}
             .activeId=${this.card.kind === 'thread' ? this.card.id : null}
             .now=${this.now}
             @ct-select=${(e: CustomEvent<{ id: string }>) => this.select(e.detail.id)}
             @ct-close=${() => (this.listOpen = false)}
+            @ct-toggle-resolved=${() => (this.showResolved = !this.showResolved)}
           ></ct-sidebar>`
         : nothing}
       ${this.visible ? this.renderCard() : nothing}

@@ -1,5 +1,5 @@
 // Two reviewers in two separate browsers, against the Supabase project in .env.local.
-// Checks that pins, replies and deletes arrive live, and that one reviewer can't delete another's comment.
+// Checks that pins, replies, resolving and deletes arrive live, and that comments can't be edited directly.
 // Usage: npm run e2e   (cleans up after itself)
 import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -41,6 +41,7 @@ for (const p of [a, b]) {
 }
 
 let failures = 0
+let marker = null
 const check = (label, ok) => {
   if (!ok) failures++
   console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`)
@@ -80,7 +81,7 @@ try {
   const startB = await pinCount(b)
 
   // A drops a pin
-  const marker = `E2E ${Date.now()}`
+  marker = `E2E ${Date.now()}`
   await a.keyboard.press('c')
   const target = await a.$('[data-feedback="confirm-roster"]')
   const box = await target.boundingBox()
@@ -106,7 +107,6 @@ try {
   await openNewest(a)
   await openNewest(b)
   await sleep(300)
-  check('other reviewer has no delete button', !(await inOverlay(b, (root) => !!root.querySelector('ct-thread').shadowRoot.querySelector('[aria-label="Delete comment"]'))))
   await focusField(b)
   if (await inOverlay(b, (root) => !!root.querySelector('ct-thread').shadowRoot.querySelector('ct-composer').shadowRoot.querySelector('input'))) {
     await b.keyboard.type('Reviewer B')
@@ -118,27 +118,54 @@ try {
   const replyTime = await within(5000, async () => (await threadText(a)).includes('Reply from B'))
   check(`reply appears in the first browser's open thread${replyTime != null ? ` (${replyTime} ms)` : ''}`, replyTime != null && replyTime <= 3000)
 
-  // B can't delete A's comment, even by calling the API directly
-  const forged = await b.evaluate(async (env, marker, root) => {
+  // A resolves: the pin hides for B. A reopens it from the list: it comes back.
+  const shown = (page) => inOverlay(page, (root, marker) => [...root.querySelectorAll('ct-pin')].some((p) => p.body === marker), marker)
+  await inOverlay(a, (root) => root.querySelector('ct-thread').shadowRoot.querySelector('[aria-label="Resolve"]').click())
+  const resolveTime = await within(5000, async () => !(await shown(b)))
+  check(`resolve reaches the second browser${resolveTime != null ? ` (${resolveTime} ms)` : ''}`, resolveTime != null)
+  await inOverlay(a, (root) => root.querySelector('ct-toolbar').shadowRoot.querySelectorAll('button')[2].click())
+  await sleep(200)
+  await inOverlay(a, (root) => root.querySelector('ct-sidebar').shadowRoot.querySelector('.toggle').click())
+  await sleep(200)
+  await inOverlay(a, (root, marker) =>
+    [...root.querySelector('ct-sidebar').shadowRoot.querySelectorAll('.item')].find((i) => i.textContent.includes(marker)).click(), marker)
+  await sleep(300)
+  await inOverlay(a, (root) => root.querySelector('ct-thread').shadowRoot.querySelector('[aria-label="Reopen"]').click())
+  const reopenTime = await within(5000, () => shown(b))
+  check(`reopen reaches the second browser${reopenTime != null ? ` (${reopenTime} ms)` : ''}`, reopenTime != null)
+
+  // B deletes A's comment from the menu: anyone can tidy up.
+  await openNewest(b)
+  await sleep(300)
+  await inOverlay(b, (root) => root.querySelector('ct-thread').shadowRoot.querySelector('[aria-label="More options"]').click())
+  await sleep(100)
+  await inOverlay(b, (root) =>
+    [...root.querySelector('ct-thread').shadowRoot.querySelectorAll('.menu button')].find((m) => m.textContent.includes('Delete')).click())
+  await sleep(100)
+  await inOverlay(b, (root) => root.querySelector('ct-thread').shadowRoot.querySelector('.danger').click())
+  const goneTime = await within(5000, async () => !(await shown(a)))
+  check(`another reviewer's delete reaches the first browser${goneTime != null ? ` (${goneTime} ms)` : ''}`, goneTime != null)
+
+  // Nothing can be changed except through the functions.
+  const direct = await b.evaluate(async (env, root) => {
     const { createClient } = await import(`/@fs${root}/node_modules/.vite/deps/@supabase_supabase-js.js`)
     const db = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false } })
-    const { data: rows } = await db.from('comments').select('id').eq('body', marker)
-    const { data } = await db.rpc('delete_comment', { comment_id: rows[0].id, token: localStorage.getItem('corktack:token') })
-    const direct = await db.from('comments').delete().eq('id', rows[0].id).select('id')
-    const hash = await db.from('comments').select('delete_token_hash').limit(1)
-    return { rpc: data, directDeleted: direct.data?.length ?? 0, hashError: !!hash.error }
-  }, env, marker, root)
-  check('delete_comment refuses another reviewer', forged.rpc === false)
-  check('direct delete is blocked', forged.directDeleted === 0)
-  check('token hash is not readable', forged.hashError)
-
-  // A deletes the thread
-  await inOverlay(a, (root) => root.querySelector('ct-thread').shadowRoot.querySelector('[aria-label="Delete comment"]').click())
-  await sleep(100)
-  await inOverlay(a, (root) => root.querySelector('ct-thread').shadowRoot.querySelector('.danger').click())
-  const goneTime = await within(5000, async () => (await pinCount(b)) === startB)
-  check(`delete reaches the second browser${goneTime != null ? ` (${goneTime} ms)` : ''}`, goneTime != null)
+    const { data: rows } = await db.from('comments').select('id').limit(1)
+    if (!rows?.length) return { skipped: true }
+    const edit = await db.from('comments').update({ body: 'Edited' }).eq('id', rows[0].id).select('id')
+    return { edited: edit.data?.length ?? 0 }
+  }, env, root)
+  check('comments cannot be edited directly', direct.skipped || direct.edited === 0)
 } finally {
+  // If a check failed partway, remove the test thread so it doesn't linger.
+  if (marker) {
+    await b.evaluate(async (env, root, marker) => {
+      const { createClient } = await import(`/@fs${root}/node_modules/.vite/deps/@supabase_supabase-js.js`)
+      const db = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false } })
+      const { data: rows } = await db.from('comments').select('id').eq('body', marker)
+      for (const row of rows ?? []) await db.rpc('delete_comment', { comment_id: row.id })
+    }, env, root, marker).catch(() => {})
+  }
   await Promise.all([browserA.close(), browserB.close()])
   await server.close()
 }

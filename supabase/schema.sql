@@ -2,8 +2,9 @@
 -- Run this once in the Supabase SQL editor. It is safe to re-run.
 --
 -- Reviewers have no accounts, so the anon key is public. The anon role can
--- only read comments and add them. Deleting goes through delete_comment(),
--- which checks a per-browser token. Nobody can edit a comment.
+-- read and add comments directly. Resolving and deleting go through
+-- set_resolved() and delete_comment(), which anyone can call, so anyone with
+-- the link can tidy up. Nobody can edit a comment's text.
 
 create table if not exists public.comments (
   id uuid primary key default gen_random_uuid(),
@@ -17,15 +18,21 @@ create table if not exists public.comments (
   anchor jsonb null check (anchor is null or (jsonb_typeof(anchor) = 'object' and octet_length(anchor::text) <= 4000)),
   viewport_width int null check (viewport_width between 1 and 100000),
   created_at timestamptz not null default now(),
-  -- SHA-256 (hex) of the browser's delete token. Never readable by clients.
-  delete_token_hash text not null check (delete_token_hash ~ '^[0-9a-f]{64}$'),
+  -- When the thread was marked done. Null while open, and always null for replies.
+  resolved_at timestamptz null,
   -- Top-level comments are pinned somewhere; replies are not.
   constraint comments_shape check (
     (parent_id is null and anchor is not null)
     or (parent_id is not null and anchor is null and viewport_width is null)
   )
-  -- To add resolving later: alter table public.comments add column resolved_at timestamptz null;
 );
+
+-- Upgrades a table made by an earlier version of this script.
+alter table public.comments add column if not exists resolved_at timestamptz null;
+alter table public.comments drop column if exists delete_token_hash;
+drop function if exists public.delete_comment(uuid, text);
+alter table public.comments drop constraint if exists comments_resolved_top_level;
+alter table public.comments add constraint comments_resolved_top_level check (parent_id is null or resolved_at is null);
 
 create index if not exists comments_project_created_at on public.comments (project, created_at);
 create index if not exists comments_parent_id on public.comments (parent_id);
@@ -76,17 +83,17 @@ create policy "Anyone can add comments"
   to anon, authenticated
   with check (true);
 
--- Column privileges. Clients can't read the token hash, and can't choose an
--- id or created_at. There is no update or delete privilege at all.
+-- Column privileges. Clients can't choose an id, created_at or resolved_at.
+-- There is no update or delete privilege: those go through the functions below.
 revoke all on public.comments from anon, authenticated;
-grant select (id, project, parent_id, route, author, body, anchor, viewport_width, created_at)
+grant select (id, project, parent_id, route, author, body, anchor, viewport_width, created_at, resolved_at)
   on public.comments to anon, authenticated;
-grant insert (project, parent_id, route, author, body, anchor, viewport_width, delete_token_hash)
+grant insert (project, parent_id, route, author, body, anchor, viewport_width)
   on public.comments to anon, authenticated;
 
--- Deletes a comment (and its replies) when the token matches the one it was
--- created with. Returns true if something was deleted.
-create or replace function public.delete_comment(comment_id uuid, token text)
+-- Deletes a comment, or a whole thread when given a top-level comment.
+-- Returns true if something was deleted.
+create or replace function public.delete_comment(comment_id uuid)
 returns boolean
 language plpgsql
 security definer
@@ -95,16 +102,35 @@ as $$
 declare
   deleted integer;
 begin
-  delete from public.comments
-  where id = comment_id
-    and delete_token_hash = encode(pg_catalog.sha256(convert_to(token, 'UTF8')), 'hex');
+  delete from public.comments where id = comment_id;
   get diagnostics deleted = row_count;
   return deleted > 0;
 end;
 $$;
 
-revoke all on function public.delete_comment(uuid, text) from public;
-grant execute on function public.delete_comment(uuid, text) to anon, authenticated;
+-- Marks a thread done, or opens it again. Only top-level comments can be resolved.
+-- Returns true if the comment was found.
+create or replace function public.set_resolved(comment_id uuid, resolved boolean)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  changed integer;
+begin
+  update public.comments
+  set resolved_at = case when resolved then coalesce(resolved_at, now()) end
+  where id = comment_id and parent_id is null;
+  get diagnostics changed = row_count;
+  return changed > 0;
+end;
+$$;
+
+revoke all on function public.delete_comment(uuid) from public;
+revoke all on function public.set_resolved(uuid, boolean) from public;
+grant execute on function public.delete_comment(uuid) to anon, authenticated;
+grant execute on function public.set_resolved(uuid, boolean) to anon, authenticated;
 
 -- Live updates. Adds the table to Supabase Realtime if it isn't there yet.
 do $$

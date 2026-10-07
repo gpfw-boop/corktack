@@ -1,6 +1,5 @@
 // Captures the widget's main states from the demo into screenshots/.
 // Usage: npm run screenshots   (set CHROME_PATH to use a specific Chrome or Chromium)
-import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -37,14 +36,12 @@ const base = 'http://localhost:5199'
 const browser = await puppeteer.launch({ executablePath: findChrome(), headless: true })
 const page = await browser.newPage()
 
-const TOKEN = 'screenshot-token'
-const tokenHash = createHash('sha256').update(TOKEN).digest('hex')
 const OWN_NAME = 'Alex Chen'
 
 /** Seeds comments using the real anchoring code, so pins land where a click would put them. */
 async function seed() {
   await page.goto(`${base}/?feedback=off`)
-  await page.evaluate(async (tokenHash, TOKEN, OWN_NAME) => {
+  await page.evaluate(async (OWN_NAME) => {
     const { createAnchor } = await import('/@fs' + window.__src + '/anchor.ts')
     const ago = (mins) => new Date(Date.now() - mins * 60_000).toISOString()
     const at = (selector, xPct, yPct) => {
@@ -52,31 +49,31 @@ async function seed() {
       const r = el.getBoundingClientRect()
       return createAnchor(el, r.left + r.width * xPct, r.top + r.height * yPct, 'data-feedback')
     }
-    const top = (id, author, body, anchor, mins, hash = 'someone-else') => ({
+    const top = (id, author, body, anchor, mins, extra = {}) => ({
       id, project: 'corktack-demo', parentId: null, route: '/', author, body, anchor,
-      viewportWidth: 1280, createdAt: ago(mins), deleteTokenHash: hash,
+      viewportWidth: 1280, createdAt: ago(mins), resolvedAt: null, ...extra,
     })
-    const reply = (id, parentId, author, body, mins, hash = 'someone-else') => ({
+    const reply = (id, parentId, author, body, mins) => ({
       id, project: 'corktack-demo', parentId, route: '/', author, body, anchor: null,
-      viewportWidth: null, createdAt: ago(mins), deleteTokenHash: hash,
+      viewportWidth: null, createdAt: ago(mins), resolvedAt: null,
     })
     const comments = [
       top('c1', 'Priya Sharma', 'Can this show who is on today before I confirm?\nRight now I have to remember.', at('[data-feedback="confirm-roster"]', 0.8, 0.3), 180),
       reply('r1', 'c1', 'Sam Lee', 'Agree. Names inline under the heading would do it.', 150),
-      reply('r2', 'c1', OWN_NAME, 'Good call, I’ll add avatars for each educator.', 4, tokenHash),
+      reply('r2', 'c1', OWN_NAME, 'Good call, I’ll add avatars for each educator.', 4),
       top('c2', 'Sam Lee', 'The greeting feels large for a dashboard.', at('h1', 0.62, 0.55), 60 * 26),
       top('c3', 'Jordan Blake', 'Link straight to the newsletter replies from here?', at('main .card:nth-of-type(2) p', 0.55, 0.5), 60 * 50),
-      top('c4', OWN_NAME, 'Should this show today’s date?', at('main .card h2', 0.18, 0.5), 6, tokenHash),
+      top('c4', OWN_NAME, 'Should this show today’s date?', at('main .card h2', 0.18, 0.5), 6),
       top('c5', 'Riley Nguyen', 'This banner competes with the roster.', {
         selector: 'body > main > aside', strategy: 'path', tag: 'aside', xPct: 0.5, yPct: 0.5,
         text: 'Holiday hours banner', pageX: 0, pageY: 0,
       }, 60 * 30),
+      top('c6', 'Priya Sharma', 'Tuesday looks short staffed.', at('main', 0.5, 0.5), 60 * 3, { route: '/roster' }),
+      top('c7', 'Sam Lee', 'Button label should say what it confirms.', at('[data-feedback="confirm-roster"]', 0.3, 0.5), 60 * 72, { resolvedAt: ago(60) }),
     ]
     localStorage.setItem('corktack:comments:corktack-demo', JSON.stringify(comments))
-    localStorage.setItem('corktack:token', TOKEN)
-    localStorage.setItem('corktack:own', JSON.stringify(['r2', 'c4']))
     localStorage.setItem('corktack:reviewer', OWN_NAME)
-  }, tokenHash, TOKEN, OWN_NAME)
+  }, OWN_NAME)
 }
 
 const overlay = () => page.evaluateHandle(() => document.querySelector('corktack-overlay').shadowRoot)
@@ -120,9 +117,12 @@ await shot('01-pins')
   await page.mouse.click(x, y)
   await settle()
   const thread = await (await overlay()).evaluateHandle((root) => root.querySelector('ct-thread').shadowRoot)
-  const del = await thread.evaluateHandle((r) => r.querySelector('button[aria-label="Delete comment"]'))
-  await del.click()
+  const more = await thread.evaluateHandle((r) => r.querySelector('button[aria-label="More options"]'))
+  await more.click()
   await page.mouse.move(80, 700)
+  await shot('04-menu')
+  const del = await thread.evaluateHandle((r) => [...r.querySelectorAll('.menu button')].find((b) => b.textContent.includes('Delete')))
+  await del.click()
   await shot('04-delete-confirm')
   await page.keyboard.press('Escape')
 }
@@ -152,8 +152,12 @@ await shot('01-pins')
   await listButton.click()
   await page.mouse.move(80, 700)
   await shot('07-sidebar')
+  const toggle = await (await overlay()).evaluateHandle((root) => root.querySelector('ct-sidebar').shadowRoot.querySelector('.toggle'))
+  await toggle.click()
+  await shot('07-sidebar-resolved')
+  await toggle.click()
   const unplaced = await (await overlay()).evaluateHandle((root) =>
-    [...root.querySelector('ct-sidebar').shadowRoot.querySelectorAll('.item')].at(-1))
+    [...root.querySelector('ct-sidebar').shadowRoot.querySelectorAll('h3')].find((h) => h.textContent.startsWith('Couldn')).nextElementSibling.querySelector('.item'))
   await unplaced.click()
   await shot('08-unplaced-centred')
   await page.keyboard.press('Escape')

@@ -53,12 +53,14 @@ function watchNavigation(): void {
  */
 export function initFeedback(options: FeedbackOptions = {}): () => void {
   if (typeof window === 'undefined') return () => {}
-  if (!isActive(options.param ?? 'feedback')) return () => {}
+  const param = options.param ?? 'feedback'
+  if (!isActive(param)) return () => {}
 
   watchNavigation()
 
   const config = {
     project: options.project ?? window.location.host,
+    param,
     adapter: options.adapter ?? localAdapter(),
     hookAttribute: options.hookAttribute ?? 'data-feedback',
     getRoute: options.getRoute ?? defaultRoute,

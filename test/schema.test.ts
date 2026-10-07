@@ -2,12 +2,9 @@
 // the public anon role can and can't do.
 import { PGlite } from '@electric-sql/pglite'
 import { readFileSync } from 'node:fs'
-import { createHash } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { hashToken } from '../src/util'
 
 const schema = readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8')
-const sha = (token: string) => createHash('sha256').update(token).digest('hex')
 const ANCHOR = JSON.stringify({ selector: 'body > main', strategy: 'path', tag: 'main', xPct: 0.5, yPct: 0.5, pageX: 0, pageY: 0 })
 
 let db: PGlite
@@ -22,15 +19,18 @@ async function asAnon<T = Record<string, unknown>>(sql: string, params: unknown[
   }
 }
 
-async function addComment(opts: { project?: string; parent?: string | null; token?: string; author?: string; body?: string } = {}) {
-  const { project = 'demo', parent = null, token = 'token-a', author = 'Priya', body = 'Hello' } = opts
+async function addComment(opts: { project?: string; parent?: string | null; author?: string; body?: string } = {}) {
+  const { project = 'demo', parent = null, author = 'Priya', body = 'Hello' } = opts
   const rows = await asAnon<{ id: string }>(
-    `insert into public.comments (project, parent_id, route, author, body, anchor, viewport_width, delete_token_hash)
-     values ($1, $2, '/', $3, $4, $5::jsonb, $6, $7) returning id`,
-    [project, parent, author, body, parent ? null : ANCHOR, parent ? null : 1280, sha(token)],
+    `insert into public.comments (project, parent_id, route, author, body, anchor, viewport_width)
+     values ($1, $2, '/', $3, $4, $5::jsonb, $6) returning id`,
+    [project, parent, author, body, parent ? null : ANCHOR, parent ? null : 1280],
   )
   return rows[0].id
 }
+
+const resolvedAt = async (id: string) =>
+  (await asAnon<{ resolved_at: string | null }>('select resolved_at from public.comments where id = $1', [id]))[0].resolved_at
 
 beforeAll(async () => {
   db = new PGlite()
@@ -45,23 +45,19 @@ beforeAll(async () => {
 })
 
 describe('schema.sql', () => {
-  it('lets anon add and read comments, but not the token hash', async () => {
+  it('lets anon add and read comments', async () => {
     const id = await addComment()
-    const rows = await asAnon('select id, author, body from public.comments where id = $1', [id])
-    expect(rows).toEqual([{ id, author: 'Priya', body: 'Hello' }])
-    await expect(asAnon('select * from public.comments')).rejects.toThrow(/permission denied/)
-    await expect(asAnon('select delete_token_hash from public.comments')).rejects.toThrow(/permission denied/)
+    const rows = await asAnon('select id, author, body, resolved_at from public.comments where id = $1', [id])
+    expect(rows).toEqual([{ id, author: 'Priya', body: 'Hello', resolved_at: null }])
   })
 
-  it('does not let anon choose an id or created_at', async () => {
-    await expect(
-      asAnon(`insert into public.comments (id, project, route, author, body, anchor, delete_token_hash)
-              values (gen_random_uuid(), 'demo', '/', 'Sam', 'Hi', $1::jsonb, $2)`, [ANCHOR, sha('x')]),
-    ).rejects.toThrow(/permission denied/)
-    await expect(
-      asAnon(`insert into public.comments (created_at, project, route, author, body, anchor, delete_token_hash)
-              values (now() - interval '1 year', 'demo', '/', 'Sam', 'Hi', $1::jsonb, $2)`, [ANCHOR, sha('x')]),
-    ).rejects.toThrow(/permission denied/)
+  it('does not let anon choose an id, created_at or resolved_at', async () => {
+    for (const [column, value] of [['id', 'gen_random_uuid()'], ['created_at', "now() - interval '1 year'"], ['resolved_at', 'now()']]) {
+      await expect(
+        asAnon(`insert into public.comments (${column}, project, route, author, body, anchor)
+                values (${value}, 'demo', '/', 'Sam', 'Hi', $1::jsonb)`, [ANCHOR]),
+      ).rejects.toThrow(/permission denied/)
+    }
   })
 
   it('does not let anon update or delete directly', async () => {
@@ -80,12 +76,12 @@ describe('schema.sql', () => {
 
   it('requires an anchor on comments and none on replies', async () => {
     await expect(
-      asAnon(`insert into public.comments (project, route, author, body, delete_token_hash) values ('demo', '/', 'Sam', 'No pin', $1)`, [sha('x')]),
+      asAnon(`insert into public.comments (project, route, author, body) values ('demo', '/', 'Sam', 'No pin')`),
     ).rejects.toThrow(/comments_shape/)
     const parent = await addComment()
     await expect(
-      asAnon(`insert into public.comments (project, parent_id, route, author, body, anchor, delete_token_hash)
-              values ('demo', $1, '/', 'Sam', 'Pinned reply', $2::jsonb, $3)`, [parent, ANCHOR, sha('x')]),
+      asAnon(`insert into public.comments (project, parent_id, route, author, body, anchor)
+              values ('demo', $1, '/', 'Sam', 'Pinned reply', $2::jsonb)`, [parent, ANCHOR]),
     ).rejects.toThrow(/comments_shape/)
   })
 
@@ -96,23 +92,66 @@ describe('schema.sql', () => {
     await expect(addComment({ parent, project: 'other' })).rejects.toThrow(/same project/)
   })
 
-  it('deletes only with the matching token, taking replies with it', async () => {
-    const parent = await addComment({ token: 'mine' })
-    const reply = await addComment({ parent, token: 'someone-else' })
+  it('lets anyone delete a comment, taking its replies with it', async () => {
+    const parent = await addComment()
+    const reply = await addComment({ parent })
+    const other = await addComment({ parent })
 
-    const [wrong] = await asAnon<{ ok: boolean }>('select public.delete_comment($1, $2) as ok', [parent, 'not-mine'])
-    expect(wrong.ok).toBe(false)
+    const [one] = await asAnon<{ ok: boolean }>('select public.delete_comment($1) as ok', [other])
+    expect(one.ok).toBe(true)
+    expect(await asAnon('select id from public.comments where id in ($1, $2)', [parent, reply])).toHaveLength(2)
 
-    const [right] = await asAnon<{ ok: boolean }>('select public.delete_comment($1, $2) as ok', [parent, 'mine'])
-    expect(right.ok).toBe(true)
+    const [thread] = await asAnon<{ ok: boolean }>('select public.delete_comment($1) as ok', [parent])
+    expect(thread.ok).toBe(true)
+    expect(await asAnon('select id from public.comments where id in ($1, $2)', [parent, reply])).toEqual([])
 
-    const left = await asAnon('select id from public.comments where id in ($1, $2)', [parent, reply])
-    expect(left).toEqual([])
+    const [gone] = await asAnon<{ ok: boolean }>('select public.delete_comment($1) as ok', [parent])
+    expect(gone.ok).toBe(false)
   })
 
-  it('hashes tokens the same way as the browser', async () => {
-    const token = 'tökén-🙂-' + crypto.randomUUID()
-    const [row] = (await db.query<{ hash: string }>(`select encode(sha256(convert_to($1, 'UTF8')), 'hex') as hash`, [token])).rows
-    expect(row.hash).toBe(await hashToken(token))
+  it('lets anyone resolve and reopen a thread, but not a reply', async () => {
+    const parent = await addComment()
+    const reply = await addComment({ parent })
+
+    await asAnon('select public.set_resolved($1, true)', [parent])
+    const first = await resolvedAt(parent)
+    expect(first).not.toBeNull()
+    // Resolving again keeps the original time.
+    await asAnon('select public.set_resolved($1, true)', [parent])
+    expect(await resolvedAt(parent)).toEqual(first)
+
+    await asAnon('select public.set_resolved($1, false)', [parent])
+    expect(await resolvedAt(parent)).toBeNull()
+
+    const [onReply] = await asAnon<{ ok: boolean }>('select public.set_resolved($1, true) as ok', [reply])
+    expect(onReply.ok).toBe(false)
+    expect(await resolvedAt(reply)).toBeNull()
+  })
+})
+
+describe('schema.sql upgrade', () => {
+  it('upgrades a table from the first version, keeping comments', async () => {
+    const old = new PGlite()
+    await old.exec(`
+      create role anon nologin;
+      create role authenticated nologin;
+      grant usage on schema public to anon, authenticated;
+      create table public.comments (
+        id uuid primary key default gen_random_uuid(), project text not null,
+        parent_id uuid null references public.comments (id) on delete cascade,
+        route text not null, author text not null, body text not null, anchor jsonb null,
+        viewport_width int null, created_at timestamptz not null default now(),
+        delete_token_hash text not null
+      );
+      create function public.delete_comment(comment_id uuid, token text) returns boolean language sql as 'select true';
+    `)
+    await old.query(`insert into public.comments (project, route, author, body, anchor, delete_token_hash) values ('demo', '/', 'Priya', 'Kept', $1::jsonb, 'x')`, [ANCHOR])
+    await old.exec(schema)
+    const rows = (await old.query<{ body: string; resolved_at: null }>('select body, resolved_at from public.comments')).rows
+    expect(rows).toEqual([{ body: 'Kept', resolved_at: null }])
+    const columns = (await old.query<{ column_name: string }>(`select column_name from information_schema.columns where table_name = 'comments'`)).rows
+    expect(columns.map((c) => c.column_name)).not.toContain('delete_token_hash')
+    const fns = (await old.query<{ args: string }>(`select pg_get_function_identity_arguments(oid) as args from pg_proc where proname = 'delete_comment'`)).rows
+    expect(fns).toEqual([{ args: 'comment_id uuid' }])
   })
 })

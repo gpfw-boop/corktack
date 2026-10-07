@@ -11,12 +11,6 @@ export const defaultRoute = (): string => {
   return hash.startsWith('#/') ? pathname + hash : pathname
 }
 
-/** Hex SHA-256 of a delete token. Matches `encode(digest(token, 'sha256'), 'hex')` in Postgres. */
-export async function hashToken(token: string): Promise<string> {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
-  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0')).join('')
-}
-
 /** Avatar colours. All hold white initials at 4.5:1 or better. */
 const AVATAR_COLOURS = ['#C2410C', '#B91C1C', '#A21CAF', '#6D28D9', '#1D4ED8', '#0E7490', '#047857', '#4D7C0F']
 

@@ -29,9 +29,11 @@ export const list = icon(svg`
 export const arrowUp = icon(svg`
   <path vector-effect="non-scaling-stroke" d="m5 12 7-7 7 7"/><path vector-effect="non-scaling-stroke" d="M12 19V5"/>`)
 
-export const trash = icon(svg`
-  <path vector-effect="non-scaling-stroke" d="M3 6h18"/>
-  <path vector-effect="non-scaling-stroke" d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-  <path vector-effect="non-scaling-stroke" d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>`)
+export const circleCheck = icon(svg`
+  <circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="10"/><path vector-effect="non-scaling-stroke" d="m9 12 2 2 4-4"/>`)
+
+export const ellipsis = icon(svg`
+  <circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="1"/><circle vector-effect="non-scaling-stroke" cx="19" cy="12" r="1"/>
+  <circle vector-effect="non-scaling-stroke" cx="5" cy="12" r="1"/>`)
 
 export const x = icon(svg`<path vector-effect="non-scaling-stroke" d="M18 6 6 18"/><path vector-effect="non-scaling-stroke" d="m6 6 12 12"/>`)

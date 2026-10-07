@@ -16,6 +16,8 @@ export class CtPin extends LitElement {
   @property() body = ''
   @property({ type: Number }) replies = 0
   @property({ type: Boolean, reflect: true }) active = false
+  /** Shown only when resolved comments are switched on, so it's faded. */
+  @property({ type: Boolean, reflect: true }) resolved = false
   /** The pin for a comment being written: no preview, not focusable. */
   @property({ type: Boolean }) draft = false
 
@@ -45,6 +47,7 @@ export class CtPin extends LitElement {
         pointer-events: auto;
         transition: max-width var(--ease), height var(--ease), padding var(--ease), background-color var(--ease), box-shadow var(--ease);
       }
+      :host([resolved]:not(:hover):not(:focus-within):not([active])) .pin { opacity: 0.5; }
       :host([active]) .pin { box-shadow: 0 0 0 2px var(--accent), 0 2px 8px rgb(0 0 0 / 0.16); }
       .pin.preview:focus-visible {
         outline-offset: 0;

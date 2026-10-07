@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { hashToken } from '../src/util'
 
 // A stand-in for the Supabase client that records calls.
 const calls: Array<{ op: string; args: unknown[] }> = []
@@ -9,7 +8,7 @@ let rpcResult: { data: unknown; error: unknown } = { data: true, error: null }
 const row = {
   id: 'c1', project: 'demo', parent_id: null, route: '/', author: 'Priya', body: 'Hi',
   anchor: { selector: 'main', strategy: 'path', tag: 'main', xPct: 0.5, yPct: 0.5, pageX: 0, pageY: 0 },
-  viewport_width: 1280, created_at: '2026-10-07T00:00:00Z',
+  viewport_width: 1280, created_at: '2026-10-07T00:00:00Z', resolved_at: null,
 }
 
 function query(): any {
@@ -58,44 +57,49 @@ describe('supabaseAdapter', () => {
     expect(calls.find((c) => c.op === 'createClient')).toBeUndefined()
   })
 
-  it('lists a project without asking for the token hash', async () => {
+  it('lists a project, asking for named columns only', async () => {
     const comments = await adapter().list('demo')
     expect(comments).toEqual([{
       id: 'c1', project: 'demo', parentId: null, route: '/', author: 'Priya', body: 'Hi',
-      anchor: row.anchor, viewportWidth: 1280, createdAt: '2026-10-07T00:00:00Z',
+      anchor: row.anchor, viewportWidth: 1280, createdAt: '2026-10-07T00:00:00Z', resolvedAt: null,
     }])
     const select = calls.find((c) => c.op === 'select')!.args[0] as string
-    expect(select).not.toContain('delete_token_hash')
+    expect(select).toContain('resolved_at')
     expect(select).not.toContain('*')
     expect(calls.find((c) => c.op === 'eq')!.args).toEqual(['project', 'demo'])
   })
 
-  it('sends a hash of the delete token, never the token', async () => {
+  it('inserts only the columns clients may set', async () => {
     await adapter().create({
       project: 'demo', parentId: null, route: '/', author: 'Priya', body: 'Hi',
-      anchor: row.anchor as never, viewportWidth: 1280, deleteToken: 'secret-token',
+      anchor: row.anchor as never, viewportWidth: 1280,
     })
     const inserted = calls.find((c) => c.op === 'insert')!.args[0] as Record<string, unknown>
-    expect(inserted.delete_token_hash).toBe(await hashToken('secret-token'))
-    expect(JSON.stringify(inserted)).not.toContain('secret-token')
+    expect(Object.keys(inserted).sort()).toEqual(['anchor', 'author', 'body', 'parent_id', 'project', 'route', 'viewport_width'])
   })
 
-  it('deletes through the RPC and reports a refused delete', async () => {
-    await adapter().remove('c1', 'tok')
-    expect(calls.find((c) => c.op === 'rpc')!.args).toEqual(['delete_comment', { comment_id: 'c1', token: 'tok' }])
-    rpcResult = { data: false, error: null }
-    await expect(adapter().remove('c1', 'tok')).rejects.toThrow(/own comments/)
+  it('deletes and resolves through the RPCs, reporting errors', async () => {
+    await adapter().remove('c1')
+    await adapter().setResolved('c1', true)
+    expect(calls.filter((c) => c.op === 'rpc').map((c) => c.args)).toEqual([
+      ['delete_comment', { comment_id: 'c1' }],
+      ['set_resolved', { comment_id: 'c1', resolved: true }],
+    ])
+    rpcResult = { data: null, error: new Error('offline') }
+    await expect(adapter().remove('c1')).rejects.toThrow(/offline/)
   })
 
   it('batches realtime events into one reload and unsubscribes cleanly', async () => {
     vi.useFakeTimers()
     const onChange = vi.fn()
     const stop = adapter().subscribe!('demo', onChange)
-    await vi.waitFor(() => expect(channelCallbacks.on).toHaveLength(2))
+    await vi.waitFor(() => expect(channelCallbacks.on).toHaveLength(3))
     expect(channelCallbacks.on[0][0]).toMatchObject({ event: 'INSERT', filter: 'project=eq.demo' })
-    expect(channelCallbacks.on[1][0]).toMatchObject({ event: 'DELETE' })
+    expect(channelCallbacks.on[1][0]).toMatchObject({ event: 'UPDATE', filter: 'project=eq.demo' })
+    expect(channelCallbacks.on[2][0]).toMatchObject({ event: 'DELETE' })
 
-    channelCallbacks.on[1][1]()
+    channelCallbacks.on[2][1]()
+    channelCallbacks.on[2][1]()
     channelCallbacks.on[1][1]()
     channelCallbacks.on[0][1]()
     vi.advanceTimersByTime(150)

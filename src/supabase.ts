@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Anchor, FeedbackComment, StorageAdapter } from './types'
-import { hashToken } from './util'
 
 export interface SupabaseAdapterOptions {
   /** Project URL, for example `import.meta.env.VITE_SUPABASE_URL`. */
@@ -21,10 +20,10 @@ interface Row {
   anchor: Anchor | null
   viewport_width: number | null
   created_at: string
+  resolved_at: string | null
 }
 
-/** Every column except delete_token_hash, which clients can't read. */
-const COLUMNS = 'id, project, parent_id, route, author, body, anchor, viewport_width, created_at'
+const COLUMNS = 'id, project, parent_id, route, author, body, anchor, viewport_width, created_at, resolved_at'
 
 const fromRow = (row: Row): FeedbackComment => ({
   id: row.id,
@@ -36,6 +35,7 @@ const fromRow = (row: Row): FeedbackComment => ({
   anchor: row.anchor,
   viewportWidth: row.viewport_width,
   createdAt: row.created_at,
+  resolvedAt: row.resolved_at,
 })
 
 /**
@@ -64,7 +64,7 @@ export function supabaseAdapter({ url, anonKey, table = 'comments' }: SupabaseAd
       return (data as Row[]).map(fromRow)
     },
 
-    async create({ deleteToken, ...comment }) {
+    async create(comment) {
       const { data, error } = await (await db())
         .from(table)
         .insert({
@@ -75,7 +75,6 @@ export function supabaseAdapter({ url, anonKey, table = 'comments' }: SupabaseAd
           body: comment.body,
           anchor: comment.anchor,
           viewport_width: comment.viewportWidth,
-          delete_token_hash: await hashToken(deleteToken),
         })
         .select(COLUMNS)
         .single()
@@ -83,10 +82,14 @@ export function supabaseAdapter({ url, anonKey, table = 'comments' }: SupabaseAd
       return fromRow(data as Row)
     },
 
-    async remove(id, deleteToken) {
-      const { data, error } = await (await db()).rpc('delete_comment', { comment_id: id, token: deleteToken })
+    async remove(id) {
+      const { error } = await (await db()).rpc('delete_comment', { comment_id: id })
       if (error) throw error
-      if (!data) throw new Error('You can only delete your own comments.')
+    },
+
+    async setResolved(id, resolved) {
+      const { error } = await (await db()).rpc('set_resolved', { comment_id: id, resolved })
+      if (error) throw error
     },
 
     subscribe(project, onChange) {
@@ -104,6 +107,7 @@ export function supabaseAdapter({ url, anonKey, table = 'comments' }: SupabaseAd
         const channel = supabase
           .channel(`corktack:${project}`)
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter: `project=eq.${project}` }, changed)
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter: `project=eq.${project}` }, changed)
           // Delete events can't be filtered by column, so any delete triggers a reload.
           .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, changed)
           .subscribe((status) => {

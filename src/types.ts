@@ -34,13 +34,12 @@ export interface FeedbackComment {
   /** Viewport width when the comment was left, in px. Null for replies. */
   viewportWidth: number | null
   createdAt: string
+  /** When the thread was marked done, or null while it's open. Always null for replies. */
+  resolvedAt: string | null
 }
 
-/** What the widget sends to an adapter. The adapter assigns `id` and `createdAt`. */
-export interface NewComment extends Omit<FeedbackComment, 'id' | 'createdAt'> {
-  /** Random per-browser token. Adapters store only its hash, and require it to delete. */
-  deleteToken: string
-}
+/** What the widget sends to an adapter. The adapter assigns `id`, `createdAt` and `resolvedAt`. */
+export type NewComment = Omit<FeedbackComment, 'id' | 'createdAt' | 'resolvedAt'>
 
 /**
  * Where comments live. Implement this to use any backend without changing the
@@ -50,8 +49,10 @@ export interface NewComment extends Omit<FeedbackComment, 'id' | 'createdAt'> {
 export interface StorageAdapter {
   list(project: string): Promise<FeedbackComment[]>
   create(comment: NewComment): Promise<FeedbackComment>
-  /** Deletes a comment (and its replies) if the token matches the one it was created with. */
-  remove(id: string, deleteToken: string): Promise<void>
+  /** Deletes a comment, and its replies when it's a top-level comment. Anyone can delete any comment. */
+  remove(id: string): Promise<void>
+  /** Marks a top-level comment resolved, or opens it again. */
+  setResolved(id: string, resolved: boolean): Promise<void>
   /** Calls `onChange` whenever comments for the project change. Returns an unsubscribe function. */
   subscribe?(project: string, onChange: () => void): () => void
 }

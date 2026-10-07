@@ -29,7 +29,7 @@ Open the page with `?feedback=1` to turn comments on, and `?feedback=off` to tur
 ## Set up Supabase
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Run [`supabase/schema.sql`](supabase/schema.sql) in the SQL editor.
+2. Run [`supabase/schema.sql`](supabase/schema.sql) in the SQL editor. Run it again after updating Corktack; it upgrades the table and keeps your comments.
 3. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`, and in your host's environment variables.
 
 ## Development
