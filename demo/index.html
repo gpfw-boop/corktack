@@ -44,12 +44,18 @@
             <div class="card" data-v-3f2a9c1b><h2>Today</h2><p>Three educators are rostered for the Joeys room.</p>
             <button class="cta" data-feedback="confirm-roster">Confirm roster</button></div>
             <div class="card" data-v-3f2a9c1b><h2>Messages</h2><p>Two families have replied to the newsletter.</p></div>`,
-      '/roster': `<h1 data-v-8812aa0e>Roster</h1>
-            <div class="card"><p>Monday: Sam, Alex, Jordan</p><p>Tuesday: Sam, Riley</p>
+      '/roster': () => `<h1 data-v-8812aa0e>Roster</h1>
+            <p><a href="/roster?week=1" data-link>Week 1</a> · <a href="/roster?week=2" data-link>Week 2</a></p>
+            <div class="card"><h2>Week ${new URLSearchParams(location.search).get('week') ?? '1'}</h2>
+            <p>Monday: Sam, Alex, Jordan</p><p>Tuesday: Sam, Riley</p>
+            <details><summary>Cover arrangements</summary><p>Jordan covers Tuesday afternoons.</p></details>
             <div class="anchor"><button class="cta" id="edit-shift">Edit Tuesday</button>
             <button class="cta" id="open-drawer">Shift notes</button></div></div>`,
     }
-    const render = () => (document.getElementById('app').innerHTML = pages[location.pathname] ?? pages['/'])
+    const render = () => {
+      const page = pages[location.pathname] ?? pages['/']
+      document.getElementById('app').innerHTML = typeof page === 'function' ? page() : page
+    }
     document.addEventListener('click', (e) => {
       const a = e.target.closest('[data-link]')
       if (!a) return

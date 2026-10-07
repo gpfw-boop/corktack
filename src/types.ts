@@ -17,6 +17,17 @@ export interface Anchor {
 }
 
 /**
+ * How to get back to what the commenter was looking at: the full address,
+ * then the clicks that revealed the pinned element (opening a drawer, a tab
+ * or an accordion), oldest first. Each step is where the click landed.
+ */
+export interface CommentView {
+  /** Path, query and hash, without Corktack's own parameters. */
+  url: string
+  steps: Anchor[]
+}
+
+/**
  * A top-level comment or a reply. Top-level comments have an anchor and no
  * parent; replies have a parent and no anchor. Only one level of replies.
  */
@@ -33,6 +44,8 @@ export interface FeedbackComment {
   anchor: Anchor | null
   /** Viewport width when the comment was left, in px. Null for replies. */
   viewportWidth: number | null
+  /** How to reopen the view the comment was left in. Null for replies and older comments. */
+  view: CommentView | null
   createdAt: string
   /** When the thread was marked done, or null while it's open. Always null for replies. */
   resolvedAt: string | null

@@ -2,7 +2,7 @@ import { localAdapter } from './storage'
 import type { FeedbackOptions } from './types'
 import { defaultRoute } from './util'
 
-export type { Anchor, FeedbackComment, FeedbackOptions, NewComment, StorageAdapter } from './types'
+export type { Anchor, CommentView, FeedbackComment, FeedbackOptions, NewComment, StorageAdapter } from './types'
 export { localAdapter } from './storage'
 export { supabaseAdapter, type SupabaseAdapterOptions } from './supabase'
 

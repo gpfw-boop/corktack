@@ -101,6 +101,8 @@ export function findElement(anchor: Anchor): Element | null {
 
 /** Viewport position for a pin, or null if the element is missing or hidden. */
 export function pointFor(el: Element, anchor: Anchor): { x: number; y: number } | null {
+  // Content in a closed <details> keeps its size in Chrome, so ask the browser whether it's shown.
+  if ('checkVisibility' in el && !el.checkVisibility({ visibilityProperty: true })) return null
   const rect = el.getBoundingClientRect()
   if (rect.width === 0 && rect.height === 0) return null
   return { x: rect.left + anchor.xPct * rect.width, y: rect.top + anchor.yPct * rect.height }

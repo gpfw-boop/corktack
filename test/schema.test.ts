@@ -45,6 +45,23 @@ beforeAll(async () => {
 })
 
 describe('schema.sql', () => {
+  it('stores the view on comments only, within a size limit', async () => {
+    const view = JSON.stringify({ url: '/roster?week=2', steps: [JSON.parse(ANCHOR)] })
+    const [{ id }] = await asAnon<{ id: string }>(
+      `insert into public.comments (project, route, author, body, anchor, view)
+       values ('demo', '/roster', 'Sam', 'Hi', $1::jsonb, $2::jsonb) returning id`, [ANCHOR, view])
+    const [row] = await asAnon<{ view: unknown }>('select view from public.comments where id = $1', [id])
+    expect(row.view).toEqual(JSON.parse(view))
+    await expect(
+      asAnon(`insert into public.comments (project, parent_id, route, author, body, view)
+              values ('demo', $1, '/roster', 'Sam', 'Reply', $2::jsonb)`, [id, view]),
+    ).rejects.toThrow(/comments_view_top_level/)
+    await expect(
+      asAnon(`insert into public.comments (project, route, author, body, anchor, view)
+              values ('demo', '/', 'Sam', 'Hi', $1::jsonb, $2::jsonb)`, [ANCHOR, JSON.stringify({ url: 'x'.repeat(9000) })]),
+    ).rejects.toThrow(/check constraint/)
+  })
+
   it('lets anon add and read comments', async () => {
     const id = await addComment()
     const rows = await asAnon('select id, author, body, resolved_at from public.comments where id = $1', [id])

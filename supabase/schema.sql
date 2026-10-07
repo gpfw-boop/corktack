@@ -20,6 +20,8 @@ create table if not exists public.comments (
   created_at timestamptz not null default now(),
   -- When the thread was marked done. Null while open, and always null for replies.
   resolved_at timestamptz null,
+  -- How to reopen what the commenter was looking at: { url, steps }. Null for replies.
+  view jsonb null check (view is null or (jsonb_typeof(view) = 'object' and octet_length(view::text) <= 8000)),
   -- Top-level comments are pinned somewhere; replies are not.
   constraint comments_shape check (
     (parent_id is null and anchor is not null)
@@ -29,10 +31,14 @@ create table if not exists public.comments (
 
 -- Upgrades a table made by an earlier version of this script.
 alter table public.comments add column if not exists resolved_at timestamptz null;
+alter table public.comments add column if not exists view jsonb null
+  check (view is null or (jsonb_typeof(view) = 'object' and octet_length(view::text) <= 8000));
 alter table public.comments drop column if exists delete_token_hash;
 drop function if exists public.delete_comment(uuid, text);
 alter table public.comments drop constraint if exists comments_resolved_top_level;
 alter table public.comments add constraint comments_resolved_top_level check (parent_id is null or resolved_at is null);
+alter table public.comments drop constraint if exists comments_view_top_level;
+alter table public.comments add constraint comments_view_top_level check (parent_id is null or view is null);
 
 create index if not exists comments_project_created_at on public.comments (project, created_at);
 create index if not exists comments_parent_id on public.comments (parent_id);
@@ -86,9 +92,9 @@ create policy "Anyone can add comments"
 -- Column privileges. Clients can't choose an id, created_at or resolved_at.
 -- There is no update or delete privilege: those go through the functions below.
 revoke all on public.comments from anon, authenticated;
-grant select (id, project, parent_id, route, author, body, anchor, viewport_width, created_at, resolved_at)
+grant select (id, project, parent_id, route, author, body, anchor, viewport_width, created_at, resolved_at, view)
   on public.comments to anon, authenticated;
-grant insert (project, parent_id, route, author, body, anchor, viewport_width)
+grant insert (project, parent_id, route, author, body, anchor, viewport_width, view)
   on public.comments to anon, authenticated;
 
 -- Deletes a comment, or a whole thread when given a top-level comment.

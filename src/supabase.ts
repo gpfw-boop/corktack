@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Anchor, FeedbackComment, StorageAdapter } from './types'
+import type { Anchor, CommentView, FeedbackComment, StorageAdapter } from './types'
 
 export interface SupabaseAdapterOptions {
   /** Project URL, for example `import.meta.env.VITE_SUPABASE_URL`. */
@@ -21,9 +21,10 @@ interface Row {
   viewport_width: number | null
   created_at: string
   resolved_at: string | null
+  view: CommentView | null
 }
 
-const COLUMNS = 'id, project, parent_id, route, author, body, anchor, viewport_width, created_at, resolved_at'
+const COLUMNS = 'id, project, parent_id, route, author, body, anchor, viewport_width, created_at, resolved_at, view'
 
 const fromRow = (row: Row): FeedbackComment => ({
   id: row.id,
@@ -36,6 +37,7 @@ const fromRow = (row: Row): FeedbackComment => ({
   viewportWidth: row.viewport_width,
   createdAt: row.created_at,
   resolvedAt: row.resolved_at,
+  view: row.view ?? null,
 })
 
 /**
@@ -75,6 +77,7 @@ export function supabaseAdapter({ url, anonKey, table = 'comments' }: SupabaseAd
           body: comment.body,
           anchor: comment.anchor,
           viewport_width: comment.viewportWidth,
+          view: comment.view,
         })
         .select(COLUMNS)
         .single()

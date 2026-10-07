@@ -5,8 +5,9 @@ import { styleMap } from 'lit/directives/style-map.js'
 import { createAnchor, findElement, pointFor } from './anchor'
 import { reviewerName } from './identity'
 import { base, pageCss, tokens } from './styles'
-import type { Anchor, FeedbackComment, StorageAdapter } from './types'
+import type { Anchor, CommentView, FeedbackComment, StorageAdapter } from './types'
 import { avatarColour, define } from './util'
+import { COMMENT_PARAM, ViewRecorder, currentViewUrl, isShown, replaySteps, waitFor } from './view'
 import type { CtComposer } from './components/composer'
 import type { SidebarSection } from './components/sidebar'
 import type { CtThread } from './components/thread'
@@ -31,15 +32,13 @@ type TopLevel = FeedbackComment & { anchor: Anchor }
 
 type Card =
   | { kind: 'none' }
-  | { kind: 'compose'; el: Element; anchor: Anchor }
+  | { kind: 'compose'; el: Element; anchor: Anchor; view: CommentView }
   | { kind: 'thread'; id: string }
 
 const SIDEBAR_WIDTH = 320
 const NARROW = 640
-/** Query parameter in comment links. */
-const COMMENT_PARAM = 'comment'
 /** How long to wait for another page to render before opening a comment on it. */
-const PENDING_MS = 2000
+const PAGE_WAIT_MS = 3000
 
 const isTopLevel = (c: FeedbackComment): c is TopLevel => c.parentId === null && c.anchor !== null
 
@@ -74,12 +73,11 @@ export class CorktackOverlay extends LitElement {
   private mutationTimer = 0
   private teardown: Array<() => void> = []
   private lastRoute = ''
-  /**
-   * A comment to open once its page has rendered: from a comment link, or
-   * after choosing a comment on another page in the list. `fallback` is the
-   * link to load if the page never shows it, for sites that aren't single-page apps.
-   */
-  private pending: { id: string; until: number; fallback: string | null } | null = null
+  private recorder!: ViewRecorder
+  /** True while reopening a comment's view, so its presses reach the page. */
+  private replaying = false
+  /** Increases with each comment opened, so a slow open gives way to a newer one. */
+  private opening = 0
 
   static styles = [
     tokens,
@@ -124,6 +122,9 @@ export class CorktackOverlay extends LitElement {
 
     this.listen()
 
+    this.recorder = new ViewRecorder(this.config.hookAttribute, this.config.param, (e) => this.commenting || this.replaying || this.inside(e))
+    this.teardown.push(this.recorder.start())
+
     // Keep the widget's own focus and presses from reaching the page. Drawers and dialogs often
     // trap focus or close on an outside press by listening on the document, and the widget sits
     // outside them, so typing in a comment would otherwise pull focus back or close the drawer.
@@ -147,7 +148,7 @@ export class CorktackOverlay extends LitElement {
     // A comment link: open that comment once comments have loaded and its page has rendered.
     const linked = new URLSearchParams(window.location.search).get(COMMENT_PARAM)
     void this.reload().then(() => {
-      if (linked) this.wait(linked, null)
+      if (linked) void this.open(linked, true)
     })
   }
 
@@ -175,7 +176,7 @@ export class CorktackOverlay extends LitElement {
     // While commenting, stop the prototype reacting to presses (links, Vue @click handlers).
     for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'touchstart']) {
       this.on(document, type, (e) => {
-        if (this.inside(e)) return
+        if (this.inside(e) || this.replaying) return
         if (!this.commenting) {
           if (type === 'pointerdown' && this.card.kind === 'thread') this.card = { kind: 'none' }
           return
@@ -187,7 +188,7 @@ export class CorktackOverlay extends LitElement {
     }
 
     this.on<MouseEvent>(document, 'click', (e) => {
-      if (!this.commenting || this.inside(e)) return
+      if (!this.commenting || this.inside(e) || this.replaying) return
       e.preventDefault()
       e.stopImmediatePropagation()
       if (e.target instanceof Element) this.startCompose(e.target, e.clientX, e.clientY)
@@ -274,6 +275,7 @@ export class CorktackOverlay extends LitElement {
       body,
       anchor: parentId ? null : compose!.anchor,
       viewportWidth: parentId ? null : window.innerWidth,
+      view: parentId ? null : compose!.view,
     })
     // Realtime may already have delivered it.
     if (!this.comments.some((c) => c.id === created.id)) this.comments = [...this.comments, created]
@@ -306,13 +308,12 @@ export class CorktackOverlay extends LitElement {
     await this.reload()
   }
 
-  /** A link that opens the prototype at this comment. */
+  /** A link that opens the prototype at this comment, in the view it was left in. */
   private commentLink(c: FeedbackComment): string {
-    const hashAt = c.route.indexOf('#')
-    const url = new URL(hashAt < 0 ? c.route : c.route.slice(0, hashAt), window.location.origin)
+    const url = new URL(c.view?.url ?? c.route, window.location.origin)
     url.searchParams.set(this.config.param, '1')
     url.searchParams.set(COMMENT_PARAM, c.id)
-    return url.href + (hashAt < 0 ? '' : c.route.slice(hashAt))
+    return url.href
   }
 
   // ---------------------------------------------------------------- state changes
@@ -339,71 +340,63 @@ export class CorktackOverlay extends LitElement {
   }
 
   private startCompose(el: Element, x: number, y: number): void {
-    this.card = { kind: 'compose', el, anchor: createAnchor(el, x, y, this.config.hookAttribute) }
+    this.card = { kind: 'compose', el, anchor: createAnchor(el, x, y, this.config.hookAttribute), view: this.recorder.viewFor(el) }
   }
 
   private toggleThread(id: string): void {
     this.card = this.card.kind === 'thread' && this.card.id === id ? { kind: 'none' } : { kind: 'thread', id }
   }
 
-  private select(id: string): void {
+  /**
+   * Opens a comment in the view it was left in: goes to its address, replays
+   * the presses that revealed it (opening a drawer, say), then opens the card
+   * at the pin, or centred if it still can't be placed. `fromLink` means the
+   * page was loaded from a comment link, so the address is already right.
+   */
+  private async open(id: string, fromLink = false): Promise<void> {
     const c = this.threads().find((t) => t.id === id)
     if (!c) return
-    if (c.route !== this.config.getRoute()) {
-      this.goTo(c.route)
-      this.wait(id, this.commentLink(c))
-      if (window.innerWidth < NARROW) this.listOpen = false
+    const token = ++this.opening
+    if (window.innerWidth < NARROW) this.listOpen = false
+
+    const there = c.view ? currentViewUrl(this.config.param) === c.view.url : this.config.getRoute() === c.route
+    const navigated = !fromLink && !there
+    if (navigated) this.goTo(c.view?.url ?? c.route)
+    const wait = navigated || fromLink ? PAGE_WAIT_MS : 300
+
+    this.replaying = true
+    try {
+      if (c.view?.steps.length) await replaySteps(c.view.steps, c.anchor, wait)
+      await waitFor(() => isShown(c.anchor), wait)
+    } finally {
+      this.replaying = false
+    }
+    if (token !== this.opening) return
+
+    // The router changed the address but not the page: load the link instead.
+    if (navigated && this.config.getRoute() === c.route && !findElement(c.anchor)) {
+      window.location.assign(this.commentLink(c))
       return
     }
+    this.measure()
+    if (c.resolvedAt) this.showResolved = true
     const el = this.positions.get(id) ? this.resolve(c) : null
     el?.scrollIntoView({ block: 'center', behavior: scrollBehaviour() })
     this.visible = true
     this.card = { kind: 'thread', id }
-    if (window.innerWidth < NARROW) this.listOpen = false
   }
 
-  /** Moves to another page without a reload, the way the prototype's own router would. */
-  private goTo(route: string): void {
-    const hashAt = route.indexOf('#')
-    const path = hashAt < 0 ? route : route.slice(0, hashAt)
-    if (hashAt >= 0 && path === window.location.pathname) {
-      window.location.hash = route.slice(hashAt)
+  /** Moves to another address without a reload, the way the prototype's own router would. */
+  private goTo(target: string): void {
+    const url = new URL(target, window.location.origin)
+    const { pathname, search, hash } = window.location
+    if (url.pathname === pathname && url.search === search && url.hash !== hash) {
+      window.location.hash = url.hash
       return
     }
-    history.pushState(null, '', route)
+    history.pushState(null, '', url.pathname + url.search + url.hash)
     // Vue Router, React Router and others follow popstate.
     window.dispatchEvent(new PopStateEvent('popstate', { state: null }))
-  }
-
-  /** Opens a comment once its element appears, or after a short wait if it never does. */
-  private wait(id: string, fallback: string | null): void {
-    this.pending = { id, until: Date.now() + PENDING_MS, fallback }
-    this.schedule()
-    // Measuring only runs when something changes, so check once more after the wait.
-    window.setTimeout(() => this.schedule(), PENDING_MS + 50)
-  }
-
-  private openPending(): void {
-    const pending = this.pending
-    if (!pending) return
-    const c = this.threads().find((t) => t.id === pending.id)
-    if (!c) {
-      if (Date.now() > pending.until) this.pending = null
-      return
-    }
-    if (c.route !== this.config.getRoute()) {
-      if (Date.now() > pending.until) this.pending = null
-      return
-    }
-    if (!this.positions.get(c.id) && Date.now() <= pending.until) return
-    this.pending = null
-    // The router changed the address but not the page: load the link instead.
-    if (!this.positions.get(c.id) && pending.fallback) {
-      window.location.assign(pending.fallback)
-      return
-    }
-    if (c.resolvedAt) this.showResolved = true
-    this.select(c.id)
   }
 
   // ---------------------------------------------------------------- measuring
@@ -424,7 +417,6 @@ export class CorktackOverlay extends LitElement {
     this.positions = next
     this.draftPoint = this.card.kind === 'compose' ? pointFor(this.card.el, this.card.anchor) : null
     this.requestUpdate()
-    this.openPending()
   }
 
   protected willUpdate(changed: PropertyValues<this>): void {
@@ -570,7 +562,7 @@ export class CorktackOverlay extends LitElement {
             .replyCounts=${replyCounts}
             .activeId=${this.card.kind === 'thread' ? this.card.id : null}
             .now=${this.now}
-            @ct-select=${(e: CustomEvent<{ id: string }>) => this.select(e.detail.id)}
+            @ct-select=${(e: CustomEvent<{ id: string }>) => void this.open(e.detail.id)}
             @ct-close=${() => (this.listOpen = false)}
             @ct-toggle-resolved=${() => (this.showResolved = !this.showResolved)}
           ></ct-sidebar>`
