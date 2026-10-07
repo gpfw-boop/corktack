@@ -108,6 +108,8 @@ export class CtComposer extends LitElement {
     }
   }
 
+  // Autofill is off, with each password manager's opt-out attribute, so the
+  // name field doesn't pop up saved identities (1Password, LastPass, Bitwarden, Dashlane).
   render() {
     return html`
       ${this.needsName
@@ -116,7 +118,11 @@ export class CtComposer extends LitElement {
             type="text"
             placeholder="Your name"
             aria-label="Your name"
-            autocomplete="name"
+            autocomplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore
+            data-form-type="other"
             maxlength="60"
             .value=${this.name}
             @input=${(e: InputEvent) => (this.name = (e.target as HTMLInputElement).value)}
@@ -132,6 +138,11 @@ export class CtComposer extends LitElement {
         <textarea
           rows="1"
           maxlength="2000"
+          autocomplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          data-bwignore
+          data-form-type="other"
           placeholder=${this.placeholder}
           aria-label=${this.placeholder}
           .value=${this.text}
