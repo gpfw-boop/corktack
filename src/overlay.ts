@@ -25,6 +25,8 @@ export interface OverlayConfig {
   adapter: StorageAdapter
   hookAttribute: string
   getRoute: () => string
+  /** Turns comments off: removes the overlay and brings the tab back. */
+  onClose: () => void
 }
 
 type Point = { x: number; y: number }
@@ -338,6 +340,7 @@ export class CorktackOverlay extends LitElement {
     if (action === 'comment') this.setCommenting(!this.commenting)
     if (action === 'visibility') this.setVisible(!this.visible)
     if (action === 'list') this.listOpen = !this.listOpen
+    if (action === 'close') this.config.onClose()
   }
 
   private startCompose(el: Element, x: number, y: number): void {

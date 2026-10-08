@@ -30,7 +30,7 @@ initFeedback({
 })
 ```
 
-Open the page with `?feedback=1` to turn comments on, and `?feedback=off` to turn them off. Leave out `adapter` to keep comments in your own browser only.
+A small tab peeks up from the bottom of the page. Hover it and click to turn comments on, and use the × in the toolbar to turn them off. Links with `?feedback=1` turn comments on straight away. To hide the tab on a prototype, pass `launcher: false`. Leave out `adapter` to keep comments in your own browser only.
 
 ## Set up Supabase
 

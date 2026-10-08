@@ -81,4 +81,6 @@ export interface FeedbackOptions {
   hookAttribute?: string
   /** How to derive the current route. Defaults to pathname, plus the hash when it looks like a hash route. */
   getRoute?: () => string
+  /** Show the hidden tab at the bottom of the page that turns comments on. Defaults to true. */
+  launcher?: boolean
 }
