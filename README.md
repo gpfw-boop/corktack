@@ -8,6 +8,12 @@ Pinned comments for live web prototypes.
 npm install github:gpfw-boop/corktack
 ```
 
+With Yarn (1 or later), use the full git URL so it builds on install:
+
+```bash
+yarn add corktack@git+https://github.com/gpfw-boop/corktack.git
+```
+
 ## Use
 
 Add one call where your app starts, for example `src/main.ts`:
