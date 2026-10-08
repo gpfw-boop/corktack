@@ -97,6 +97,8 @@ try {
   check(`pin appears in the second browser${pinTime != null ? ` (${pinTime} ms)` : ''}`, pinTime != null && pinTime <= 3000)
   const [posA, posB] = [await pinPosition(a, marker), await pinPosition(b, marker)]
   check('at the same spot', posA != null && posA === posB)
+  const view = await b.evaluate((marker) => document.querySelector('corktack-overlay').comments.find((c) => c.body === marker)?.view, marker)
+  check('the view it was left in is saved', view?.url === '/' && Array.isArray(view.steps))
 
   // Both open the thread; B replies
   const openNewest = (page) =>
