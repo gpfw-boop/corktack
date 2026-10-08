@@ -28,19 +28,23 @@ export class CtSidebar extends LitElement {
   static styles = [
     base,
     css`
+      /* Floats clear of the edges, like a card, rather than docking to the side. */
       :host {
         position: fixed;
-        top: 0;
-        right: 0;
-        bottom: 0;
+        top: 12px;
+        right: 12px;
+        bottom: 12px;
         display: flex;
         flex-direction: column;
-        width: min(320px, 100vw);
+        width: min(320px, calc(100vw - 24px));
+        overflow: hidden;
         background: var(--surface);
-        border-left: 1px solid var(--border);
+        border-radius: 16px;
         box-shadow: var(--shadow);
         pointer-events: auto;
+        animation: slide-in var(--spring);
       }
+      @keyframes slide-in { from { opacity: 0; transform: translateX(24px); } }
       header {
         display: flex;
         align-items: center;

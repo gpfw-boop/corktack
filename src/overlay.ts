@@ -35,7 +35,8 @@ type Card =
   | { kind: 'compose'; el: Element; anchor: Anchor; view: CommentView }
   | { kind: 'thread'; id: string }
 
-const SIDEBAR_WIDTH = 320
+/** The comments list's width plus the gap it floats in. */
+const SIDEBAR_WIDTH = 332
 const NARROW = 640
 /** How long to wait for another page to render before opening a comment on it. */
 const PAGE_WAIT_MS = 3000
@@ -103,9 +104,9 @@ export class CorktackOverlay extends LitElement {
         border-radius: 12px;
         box-shadow: var(--shadow);
         pointer-events: auto;
-        animation: open var(--ease);
+        animation: open var(--spring);
       }
-      @keyframes open { from { opacity: 0; } }
+      @keyframes open { from { opacity: 0; transform: scale(0.94); } }
     `,
   ]
 

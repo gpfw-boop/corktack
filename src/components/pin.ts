@@ -25,6 +25,9 @@ export class CtPin extends LitElement {
     base,
     css`
       :host { position: absolute; width: 0; height: 0; }
+      /* Drops in from just above its point when it appears. */
+      .pin { animation: drop var(--spring); transform-origin: 0 100%; }
+      @keyframes drop { from { opacity: 0; transform: translateY(-8px) scale(0.6); } }
       :host(:hover), :host(:focus-within), :host([active]) { z-index: 1; }
       .pin {
         position: absolute;

@@ -21,10 +21,10 @@ export class CtToolbar extends LitElement {
         bottom: calc(16px + env(safe-area-inset-bottom, 0px));
         transform: translateX(-50%);
         display: flex;
-        gap: 4px;
-        padding: 4px;
+        gap: 6px;
+        padding: 6px;
         background: var(--surface);
-        border-radius: 12px;
+        border-radius: 16px;
         box-shadow: var(--shadow);
         pointer-events: auto;
       }
@@ -32,39 +32,56 @@ export class CtToolbar extends LitElement {
       button {
         display: grid;
         place-items: center;
-        width: 32px;
-        height: 32px;
+        width: 37px;
+        height: 37px;
         padding: 0;
         border: 0;
-        border-radius: 8px;
+        border-radius: 11px;
         background: transparent;
         color: var(--text);
+        transition: transform var(--spring), background-color var(--ease), box-shadow var(--ease);
       }
-      button:hover { background: var(--hover); }
-      button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+      .icon { width: 18px; height: 18px; stroke-width: 1.75; }
+      button:hover { background: var(--hover); transform: translateY(-2px); }
+      button:active { transform: scale(0.9); }
+      button[aria-pressed="true"] { background: var(--text); color: #fff; }
+      /* The comment tool is the main one, so it's tinted even when off. */
+      .comment { background: var(--accent-soft); color: var(--accent); }
+      .comment:hover { background: #D3EBFF; }
+      .comment[aria-pressed="true"] {
+        background: var(--accent);
+        color: #fff;
+        box-shadow: 0 0 0 4px rgb(13 153 255 / 0.2);
+        animation: pop var(--spring);
+      }
+      @keyframes pop { 50% { transform: scale(1.15); } }
       .tip {
         position: absolute;
-        bottom: calc(100% + 10px);
+        bottom: calc(100% + 12px);
         left: 50%;
-        transform: translateX(-50%);
-        padding: 4px 8px;
-        border-radius: 6px;
+        transform: translate(-50%, 4px);
+        padding: 5px 9px;
+        border-radius: 8px;
         background: var(--text);
         color: #fff;
         font-size: 12px;
         white-space: nowrap;
         pointer-events: none;
         opacity: 0;
-        transition: opacity var(--ease);
+        transition: opacity var(--ease), transform var(--spring);
       }
       .tip kbd { font: inherit; opacity: 0.7; margin-left: 6px; }
-      .wrap:hover .tip, button:focus-visible + .tip { opacity: 1; }
+      .wrap:hover .tip, button:focus-visible + .tip { opacity: 1; transform: translate(-50%, 0); }
+      @media (prefers-reduced-motion: reduce) {
+        button:hover, button:active { transform: none; }
+      }
     `,
   ]
 
   private button(action: ToolbarAction, label: string, key: string | null, pressed: boolean, icon: unknown) {
     return html`<div class="wrap">
       <button
+        class=${action}
         aria-label=${label}
         aria-keyshortcuts=${key ?? nothing}
         aria-pressed=${String(pressed)}

@@ -20,6 +20,9 @@ export const tokens = css`
     --shadow: 0 2px 6px rgb(0 0 0 / 0.08), 0 10px 28px rgb(0 0 0 / 0.12);
     --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --ease: 140ms ease-out;
+    /* A little overshoot, for things that appear or respond to a press. */
+    --spring: 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    --accent-soft: #E7F4FF;
   }
 `
 
