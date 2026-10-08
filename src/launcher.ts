@@ -24,8 +24,8 @@ const STYLE = `
     font: 12px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  /* A generous hover area above the sliver, so it's easy to find with the pointer. */
-  .zone { display: flex; flex-direction: column; align-items: center; padding: 24px 32px 0; }
+  /* A small hover area around the handle, so passing near the bottom edge doesn't set it off. */
+  .zone { position: relative; display: flex; flex-direction: column; align-items: center; padding: 8px 12px 0; }
   button {
     position: relative;
     display: grid;
@@ -56,13 +56,18 @@ const STYLE = `
     transition: opacity 140ms ease-out;
   }
   .zone:hover button, button:focus-visible, :host([revealed]) button { margin-bottom: 16px; }
+  /* Rising waits a moment, so the pointer has to rest on the handle; hiding is immediate. */
+  .zone:hover button, .zone:hover button::before, .zone:hover .tip { transition-delay: 250ms; }
   .zone:hover button::before, button:focus-visible::before, :host([revealed]) button::before { opacity: 0; }
   button:hover { background: #D3EBFF; }
   button:active { background: #0D99FF; color: #fff; }
   button:focus-visible { outline: 2px solid #0D99FF; outline-offset: 2px; }
+  /* Out of the flow, so its invisible box doesn't add to the hover area. Sits above the risen button. */
   .tip {
-    order: -1;
-    margin-bottom: 8px;
+    position: absolute;
+    bottom: 68px;
+    left: 50%;
+    transform: translateX(-50%);
     padding: 5px 9px;
     border-radius: 8px;
     background: #1E1E1E;
@@ -85,8 +90,8 @@ export function mountLauncher(onOpen: () => void): () => void {
   const root = host.attachShadow({ mode: 'open' })
   root.innerHTML = `<style>${STYLE}</style>
     <div class="zone">
-      <button type="button" aria-label="Turn on comments">${ICON}</button>
-      <span class="tip" aria-hidden="true">Comments</span>
+      <button type="button" aria-label="Add feedback">${ICON}</button>
+      <span class="tip" aria-hidden="true">Add feedback</span>
     </div>`
 
   let hideTimer = 0
