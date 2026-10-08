@@ -2,6 +2,8 @@
 
 Pinned comments for live web prototypes.
 
+Setting up a prototype with an AI agent? Point it at [`docs/add-to-a-prototype.md`](docs/add-to-a-prototype.md).
+
 ## Install
 
 ```bash
