@@ -49,3 +49,19 @@ export const plural = (n: number, one: string, many: string): string => `${n} ${
 export function define(tag: string, element: CustomElementConstructor): void {
   if (!customElements.get(tag)) customElements.define(tag, element)
 }
+
+/** Moves to another address without a reload, the way the prototype's own router would. */
+export function navigateTo(target: string): void {
+  const url = new URL(target, window.location.origin)
+  const { pathname, search, hash } = window.location
+  if (url.pathname === pathname && url.search === search) {
+    if (url.hash !== hash) window.location.hash = url.hash
+    return
+  }
+  history.pushState(null, '', url.pathname + url.search + url.hash)
+  // Vue Router, React Router and others follow popstate.
+  window.dispatchEvent(new PopStateEvent('popstate', { state: null }))
+}
+
+/** Where a study's progress is kept for the tab. */
+export const studyProgressKey = (id: string): string => `corktack:study:${id}`

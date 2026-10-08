@@ -6,7 +6,7 @@ import { createAnchor, findElement, pointFor } from './anchor'
 import { reviewerName } from './identity'
 import { base, pageCss, tokens } from './styles'
 import type { Anchor, CommentView, FeedbackComment, StorageAdapter } from './types'
-import { avatarColour, define } from './util'
+import { avatarColour, define, navigateTo } from './util'
 import { COMMENT_PARAM, ViewRecorder, currentViewUrl, isShown, replaySteps, waitFor } from './view'
 import type { CtComposer } from './components/composer'
 import type { SidebarSection } from './components/sidebar'
@@ -365,7 +365,7 @@ export class CorktackOverlay extends LitElement {
 
     const there = c.view ? currentViewUrl(this.config.param) === c.view.url : this.config.getRoute() === c.route
     const navigated = !fromLink && !there
-    if (navigated) this.goTo(c.view?.url ?? c.route)
+    if (navigated) navigateTo(c.view?.url ?? c.route)
     const wait = navigated || fromLink ? PAGE_WAIT_MS : 300
 
     this.replaying = true
@@ -388,19 +388,6 @@ export class CorktackOverlay extends LitElement {
     el?.scrollIntoView({ block: 'center', behavior: scrollBehaviour() })
     this.visible = true
     this.card = { kind: 'thread', id }
-  }
-
-  /** Moves to another address without a reload, the way the prototype's own router would. */
-  private goTo(target: string): void {
-    const url = new URL(target, window.location.origin)
-    const { pathname, search, hash } = window.location
-    if (url.pathname === pathname && url.search === search && url.hash !== hash) {
-      window.location.hash = url.hash
-      return
-    }
-    history.pushState(null, '', url.pathname + url.search + url.hash)
-    // Vue Router, React Router and others follow popstate.
-    window.dispatchEvent(new PopStateEvent('popstate', { state: null }))
   }
 
   // ---------------------------------------------------------------- measuring

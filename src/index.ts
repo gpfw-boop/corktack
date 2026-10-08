@@ -1,13 +1,15 @@
 import { mountLauncher } from './launcher'
 import { localAdapter } from './storage'
 import type { FeedbackOptions } from './types'
-import { defaultRoute } from './util'
+import { defaultRoute, studyProgressKey } from './util'
 
-export type { Anchor, CommentView, FeedbackComment, FeedbackOptions, NewComment, StorageAdapter } from './types'
+export type { Anchor, CommentView, FeedbackComment, FeedbackOptions, NewComment, StorageAdapter, Study, StudyTask } from './types'
 export { localAdapter } from './storage'
 export { supabaseAdapter, type SupabaseAdapterOptions } from './supabase'
 
 const MODE_KEY = 'corktack:mode'
+const STUDY_KEY = 'corktack:study'
+const STUDY_PARAM = 'study'
 
 /**
  * Reads the activation parameter. The mode is kept in sessionStorage so it
@@ -34,6 +36,42 @@ function setMode(on: boolean): void {
     else sessionStorage.removeItem(MODE_KEY)
   } catch {
     // Without sessionStorage, the mode lasts until the page reloads.
+  }
+}
+
+/**
+ * Reads ?study=<id> and remembers it for the tab, so the study survives
+ * client-side navigation and reloads. ?study=off ends it. Returns the running
+ * study's id, if it's one of the prototype's studies.
+ */
+function activeStudy(studies: FeedbackOptions['studies']): string | null {
+  const value = new URLSearchParams(window.location.search).get(STUDY_PARAM)
+  try {
+    const current = sessionStorage.getItem(STUDY_KEY)
+    if (value === 'off') endStudy()
+    else if (value && value !== current) {
+      if (studies?.[value]) {
+        // A new study, or a different one: start it from the welcome.
+        if (current) sessionStorage.removeItem(studyProgressKey(current))
+        sessionStorage.setItem(STUDY_KEY, value)
+      } else {
+        console.warn(`[corktack] No study called "${value}". Add it to initFeedback({ studies }).`)
+      }
+    }
+    const id = sessionStorage.getItem(STUDY_KEY)
+    return id && studies?.[id] ? id : null
+  } catch {
+    return value && value !== 'off' && studies?.[value] ? value : null
+  }
+}
+
+function endStudy(): void {
+  try {
+    const id = sessionStorage.getItem(STUDY_KEY)
+    if (id) sessionStorage.removeItem(studyProgressKey(id))
+    sessionStorage.removeItem(STUDY_KEY)
+  } catch {
+    // Nothing kept.
   }
 }
 
@@ -102,7 +140,27 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
     })
   }
 
-  const start = () => (isActive(param) ? open() : showLauncher())
+  // A study keeps comments, pins and the tab away for its whole run.
+  const study = activeStudy(options.studies)
+  let studyBar: HTMLElement | undefined
+  const runStudy = (id: string) => {
+    watchNavigation()
+    void import('./study').then(({ mountStudy }) => {
+      if (removed) return
+      studyBar = mountStudy({
+        id,
+        study: options.studies![id],
+        hookAttribute: config.hookAttribute,
+        onEnd: () => {
+          endStudy()
+          studyBar?.remove()
+          studyBar = undefined
+        },
+      })
+    })
+  }
+
+  const start = () => (study ? runStudy(study) : isActive(param) ? open() : showLauncher())
   if (document.body) start()
   else document.addEventListener('DOMContentLoaded', start, { once: true })
 
@@ -110,5 +168,6 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
     removed = true
     overlay?.remove()
     removeLauncher?.()
+    studyBar?.remove()
   }
 }

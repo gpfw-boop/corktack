@@ -109,7 +109,7 @@
       panel.setAttribute('aria-modal', 'true')
       panel.setAttribute('aria-label', 'Shift notes')
       panel.innerHTML = `<h2>Shift notes</h2><p>Tuesday is short one educator after 2pm.</p>
-        <label>Note for the team<textarea></textarea></label><p><button class="cta" id="save-notes">Save notes</button></p>`
+        <label>Note for the team<textarea></textarea></label><p><button class="cta" id="save-notes" data-feedback="save-notes">Save notes</button></p>`
       document.body.append(backdrop, panel)
       drawer = { backdrop, panel }
       panel.querySelector('textarea').focus()
@@ -127,6 +127,32 @@
     initFeedback({
       project: 'corktack-demo',
       adapter: url && anonKey ? supabaseAdapter({ url, anonKey }) : undefined,
+      // Open with ?study=roster to try study mode.
+      studies: {
+        roster: {
+          title: 'Roster check',
+          tasks: [
+            {
+              title: 'Find the roster for week 2',
+              instructions: 'You’ve heard week 2 looks different. Find who’s working that week.',
+              start: '/',
+              goal: { url: '/roster?week=2' },
+            },
+            {
+              title: 'Leave a note for Tuesday’s team',
+              instructions: 'Tuesday is short staffed. Write a short note for the team and save it.',
+              start: '/roster?week=2',
+              goal: { press: 'save-notes' },
+            },
+            {
+              title: 'Confirm today’s roster',
+              instructions: 'Everything looks right for today. Let the team know the roster is confirmed.',
+              start: '/',
+              goal: { press: 'confirm-roster' },
+            },
+          ],
+        },
+      },
     })
   </script>
 </body>

@@ -32,6 +32,32 @@ initFeedback({
 
 A small tab peeks up from the bottom of the page. Hover it and click to turn comments on, and use the × in the toolbar to turn them off. Links with `?feedback=1` turn comments on straight away. To hide the tab on a prototype, pass `launcher: false`. Leave out `adapter` to keep comments in your own browser only.
 
+## Run a study
+
+Take someone through tasks with the instructions shown at the top of the prototype. Add studies to `initFeedback`, then send them `?study=<id>`. Comments stay off for the whole study.
+
+```ts
+initFeedback({
+  project: 'my-prototype',
+  studies: {
+    onboarding: {
+      title: 'Roster check',
+      tasks: [
+        {
+          title: 'Find the roster for week 2',
+          instructions: 'Find who’s working in week 2.',
+          start: '/',
+          goal: { url: '/roster?week=2' },
+        },
+        { title: 'Confirm today’s roster', goal: { press: 'confirm-roster' } },
+      ],
+    },
+  },
+})
+```
+
+A task finishes by itself when its goal is met: reaching `url`, or pressing the element with `data-feedback` set to `press`. Otherwise the participant presses Done, or I’m stuck to move on. Progress survives reloads. `?study=off` ends a study.
+
 ## Set up Supabase
 
 1. Create a project at [supabase.com](https://supabase.com).

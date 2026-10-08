@@ -70,6 +70,30 @@ export interface StorageAdapter {
   subscribe?(project: string, onChange: () => void): () => void
 }
 
+/** One task in a study. */
+export interface StudyTask {
+  /** Short and plain, e.g. "Find next week's roster". */
+  title: string
+  /** What to do, in the participant's words. Shown alongside the prototype for the whole task. */
+  instructions?: string
+  /** Address to go to when the task starts, e.g. "/". Leave out to start wherever they are. */
+  start?: string
+  /**
+   * Finishes the task by itself when reached. `url` matches the path, plus the
+   * query if given. `press` is the value of a `data-feedback` hook to press.
+   * Without a goal, the participant presses Done.
+   */
+  goal?: { url?: string; press?: string }
+}
+
+/** A set of tasks to take someone through, opened with ?study=<id>. */
+export interface Study {
+  title: string
+  /** A line or two before the first task. */
+  intro?: string
+  tasks: StudyTask[]
+}
+
 export interface FeedbackOptions {
   /** Identifies the prototype, so several prototypes on one backend stay separate. Defaults to location.host. */
   project?: string
@@ -83,4 +107,9 @@ export interface FeedbackOptions {
   getRoute?: () => string
   /** Show the hidden tab at the bottom of the page that turns comments on. Defaults to true. */
   launcher?: boolean
+  /**
+   * Studies to take participants through, keyed by id. Open one with
+   * ?study=<id>; comments stay off for the whole study. ?study=off ends it.
+   */
+  studies?: Record<string, Study>
 }

@@ -36,4 +36,8 @@ export const ellipsis = icon(svg`
   <circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="1"/><circle vector-effect="non-scaling-stroke" cx="19" cy="12" r="1"/>
   <circle vector-effect="non-scaling-stroke" cx="5" cy="12" r="1"/>`)
 
+export const chevronUp = icon(svg`<path vector-effect="non-scaling-stroke" d="m18 15-6-6-6 6"/>`)
+
+export const chevronDown = icon(svg`<path vector-effect="non-scaling-stroke" d="m6 9 6 6 6-6"/>`)
+
 export const x = icon(svg`<path vector-effect="non-scaling-stroke" d="M18 6 6 18"/><path vector-effect="non-scaling-stroke" d="m6 6 12 12"/>`)
