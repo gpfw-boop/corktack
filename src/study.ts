@@ -112,23 +112,30 @@ export class CorktackStudy extends LitElement {
       .icon-button { flex: none; margin: -4px -6px 0 0; }
       .flash { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
       .flash .icon { width: 20px; height: 20px; color: var(--accent); }
-      .pill {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        max-width: calc(100vw - 24px);
-        padding: 6px 8px 6px 6px;
+      /* Hidden: the bar slides up off the screen, leaving only its handle peeking down from the top edge. */
+      .dock { display: flex; flex-direction: column; align-items: center; transition: transform var(--spring); }
+      .dock.hidden { transform: translateY(calc(-100% + 2px)); }
+      /* Resting on the handle, or tabbing into the bar, brings it down while you're there. */
+      .dock.hidden:hover, .dock.hidden:focus-within { transform: none; transition-delay: 250ms; }
+      /* Tucked away, the bar's shadow would show as a line along the top edge. */
+      .dock.hidden:not(:hover):not(:focus-within) .bar { box-shadow: none; }
+      .handle {
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 14px;
+        padding: 0;
         border: 0;
-        border-radius: 999px;
+        border-radius: 0 0 10px 10px;
         background: var(--surface);
-        box-shadow: var(--shadow);
-        animation: drop var(--spring);
+        box-shadow: 0 4px 10px rgb(0 0 0 / 0.1);
       }
-      .pill .step { margin: 0; }
-      .pill .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+      .handle::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: var(--accent); }
+      .dock:not(.hidden) .handle { visibility: hidden; }
       .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       @media (prefers-reduced-motion: reduce) {
         .button:hover, .button:active { transform: none; }
+        .dock { transition: none; }
       }
     `,
   ]
@@ -136,10 +143,11 @@ export class CorktackStudy extends LitElement {
   configure(config: StudyConfig): void {
     this.config = config
     try {
-      const saved = JSON.parse(sessionStorage.getItem(progressKey(config.id)) ?? 'null') as { phase: Phase; index: number } | null
+      const saved = JSON.parse(sessionStorage.getItem(progressKey(config.id)) ?? 'null') as { phase: Phase; index: number; collapsed?: boolean } | null
       if (saved && saved.index < config.study.tasks.length) {
         this.phase = saved.phase
         this.index = saved.index
+        this.collapsed = !!saved.collapsed
       }
     } catch {
       // No saved progress: start at the welcome.
@@ -185,14 +193,14 @@ export class CorktackStudy extends LitElement {
 
   private save(): void {
     try {
-      sessionStorage.setItem(progressKey(this.config.id), JSON.stringify({ phase: this.phase, index: this.index }))
+      sessionStorage.setItem(progressKey(this.config.id), JSON.stringify({ phase: this.phase, index: this.index, collapsed: this.collapsed }))
     } catch {
       // Progress lasts until a reload.
     }
   }
 
   protected willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has('phase' as keyof CorktackStudy) || changed.has('index' as keyof CorktackStudy)) this.save()
+    if (['phase', 'index', 'collapsed'].some((key) => changed.has(key as keyof CorktackStudy))) this.save()
   }
 
   protected updated(changed: PropertyValues<this>): void {
@@ -211,6 +219,7 @@ export class CorktackStudy extends LitElement {
 
   /** Shows a short message, then moves to the next task or the thank you. */
   private complete(outcome: 'done' | 'stuck'): void {
+    this.collapsed = false
     this.flash = outcome
     clearTimeout(this.flashTimer)
     this.flashTimer = window.setTimeout(() => {
@@ -258,12 +267,6 @@ export class CorktackStudy extends LitElement {
       </div>`
     }
 
-    if (this.phase === 'doing' && this.collapsed) {
-      return html`<button class="pill" aria-label="Show task" title="Show task" @click=${() => (this.collapsed = false)}>
-        ${this.step()}<span class="title">${task.title}</span>${chevronDown}
-      </button>`
-    }
-
     const doing = this.phase === 'doing'
     return html`<div class="bar">
       <div class="text">
@@ -275,7 +278,9 @@ export class CorktackStudy extends LitElement {
         ${doing
           ? html`<button class="button" @click=${() => this.complete('stuck')}>I’m stuck</button>
               <button class="button primary" @click=${() => this.complete('done')}>Done</button>
-              <button class="icon-button" aria-label="Hide task" title="Hide task" @click=${() => (this.collapsed = true)}>${chevronUp}</button>`
+              ${this.collapsed
+                ? html`<button class="icon-button" aria-label="Keep task open" title="Keep task open" @click=${() => (this.collapsed = false)}>${chevronDown}</button>`
+                : html`<button class="icon-button" aria-label="Hide task" title="Hide task" @click=${() => (this.collapsed = true)}>${chevronUp}</button>`}`
           : html`<button class="button primary" @click=${() => this.startTask()}>Start task</button>`}
       </div>
     </div>`
@@ -288,7 +293,10 @@ export class CorktackStudy extends LitElement {
         ? `Task ${this.index + 1} of ${this.config.study.tasks.length}: ${this.task().title}`
         : ''
     return html`
-      <section aria-label="Study">${keyed(`${this.phase}-${this.index}-${this.flash}-${this.collapsed}`, this.content())}</section>
+      <section aria-label="Study" class="dock ${this.collapsed && this.phase === 'doing' && !this.flash ? 'hidden' : ''}">
+        ${keyed(`${this.phase}-${this.index}-${this.flash}`, this.content())}
+        <button class="handle" aria-label="Show task" title="Show task" tabindex=${this.collapsed ? 0 : -1} @click=${() => (this.collapsed = false)}></button>
+      </section>
       <p class="sr-only" aria-live="polite">${announcement}</p>
     `
   }

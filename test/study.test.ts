@@ -114,6 +114,28 @@ describe('study mode', () => {
     expect(text()).toContain('I’m stuck')
   })
 
+  it('tucks away off the top, keeping that across a reload, and comes back from its handle', async () => {
+    history.replaceState(null, '', '/?study=roster')
+    stop = initFeedback({ studies: { roster: study } })
+    await ready()
+    press('Start')
+    await rendered()
+    press('Start task')
+    await rendered()
+    const dock = () => bar()!.shadowRoot!.querySelector('.dock')!
+    ;(bar()!.shadowRoot!.querySelector('[aria-label="Hide task"]') as HTMLElement).click()
+    await rendered()
+    expect(dock().classList.contains('hidden')).toBe(true)
+    stop()
+
+    stop = initFeedback({ studies: { roster: study } })
+    await ready()
+    expect(dock().classList.contains('hidden')).toBe(true)
+    ;(bar()!.shadowRoot!.querySelector('.handle') as HTMLElement).click()
+    await rendered()
+    expect(dock().classList.contains('hidden')).toBe(false)
+  })
+
   it('ignores a study the prototype doesn’t have, and ends with ?study=off', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     history.replaceState(null, '', '/?study=nope')
