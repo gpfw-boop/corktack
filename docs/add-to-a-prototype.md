@@ -117,7 +117,7 @@ initFeedback({ project: 'roster-prototype', adapter: supabaseAdapter({ … }), s
 - The key (`roster-check`) is the id used in the link: `?study=roster-check`.
 - `title` is short and plain. `instructions` describe the goal in the participant's words, without naming the buttons or links to use, because that gives the answer away.
 - `start` is the address the task begins at. Leave it out to start wherever the participant is.
-- `goal` finishes the task by itself. `{ url }` matches the path, plus the query and hash if given. `{ press }` matches a `data-feedback` value, so add that hook to the element. Without a goal, the participant presses Done. They can always press I'm stuck.
+- `goal` finishes the task by itself. `{ url }` matches the path, plus the query and hash if given. `{ press }` matches a `data-feedback` value, so add that hook to the element. Without a goal, the participant presses Done when they've finished. Done is always there, so they can also use it to move on if they get stuck.
 - Check every `goal.url` is a real route, and every `goal.press` exists on the page the task leads to.
 - Write copy in the user's preferred language and spelling.
 

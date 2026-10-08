@@ -58,7 +58,7 @@ initFeedback({
 })
 ```
 
-A task finishes by itself when its goal is met: reaching `url`, or pressing the element with `data-feedback` set to `press`. Otherwise the participant presses Done, or I’m stuck to move on. Progress survives reloads. `?study=off` ends a study.
+A task finishes by itself when its goal is met: reaching `url`, or pressing the element with `data-feedback` set to `press`. Otherwise the participant presses Done to move on. Progress survives reloads. `?study=off` ends a study.
 
 ## Set up Supabase
 

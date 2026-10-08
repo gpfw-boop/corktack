@@ -80,7 +80,7 @@ describe('study mode', () => {
     expect(sessionStorage.getItem('corktack:study')).toBeNull()
   })
 
-  it('moves on when someone is stuck', async () => {
+  it('moves on when they press Done, with or without a goal', async () => {
     history.replaceState(null, '', '/?study=roster')
     stop = initFeedback({ studies: { roster: study } })
     await ready()
@@ -89,9 +89,10 @@ describe('study mode', () => {
     press('Start task')
     await rendered()
     vi.useFakeTimers()
-    press('I’m stuck')
+    expect(text()).not.toContain('stuck')
+    press('Done')
     await rendered()
-    expect(text()).toContain('No problem, moving on')
+    expect(text()).toContain('Task done')
     await vi.advanceTimersByTimeAsync(1500)
     await rendered()
     expect(text()).toContain('Task 2 of 2')
@@ -111,7 +112,7 @@ describe('study mode', () => {
     stop = initFeedback({ studies: { roster: study } })
     await ready()
     expect(text()).toContain('Find week 2')
-    expect(text()).toContain('I’m stuck')
+    expect(text()).toContain('Done')
   })
 
   it('tucks away off the top, keeping that across a reload, and comes back from its handle', async () => {
@@ -125,7 +126,12 @@ describe('study mode', () => {
     const dock = () => bar()!.shadowRoot!.querySelector('.dock')!
     ;(bar()!.shadowRoot!.querySelector('[aria-label="Hide task"]') as HTMLElement).click()
     await rendered()
+    // Hidden straight away, even with the pointer still on it, until the pointer moves onto the handle.
     expect(dock().classList.contains('hidden')).toBe(true)
+    expect(dock().classList.contains('settling')).toBe(true)
+    bar()!.shadowRoot!.querySelector('.handle')!.dispatchEvent(new Event('pointermove'))
+    await rendered()
+    expect(dock().classList.contains('settling')).toBe(false)
     stop()
 
     stop = initFeedback({ studies: { roster: study } })

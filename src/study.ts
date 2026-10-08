@@ -46,7 +46,14 @@ export class CorktackStudy extends LitElement {
   @state() private index = 0
   @state() private collapsed = false
   /** A short message between tasks. */
-  @state() private flash: '' | 'done' | 'stuck' = ''
+  @state() private flash = false
+  /**
+   * Just hidden with the pointer or focus still on the bar. Hover and focus
+   * don't bring it back until the pointer moves onto the handle, or focus
+   * comes back in. (Pointer leave can't be used: the bar slides away from
+   * under a still pointer, and browsers don't report that as leaving.)
+   */
+  @state() private settling = false
 
   private teardown: Array<() => void> = []
   private flashTimer = 0
@@ -58,7 +65,7 @@ export class CorktackStudy extends LitElement {
       :host {
         all: initial;
         position: fixed;
-        top: calc(12px + env(safe-area-inset-top, 0px));
+        top: 0;
         left: 50%;
         z-index: 2147483000;
         transform: translateX(-50%);
@@ -113,12 +120,24 @@ export class CorktackStudy extends LitElement {
       .flash { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
       .flash .icon { width: 20px; height: 20px; color: var(--accent); }
       /* Hidden: the bar slides up off the screen, leaving only its handle peeking down from the top edge. */
-      .dock { display: flex; flex-direction: column; align-items: center; transition: transform var(--spring); }
-      .dock.hidden { transform: translateY(calc(-100% + 2px)); }
+      /*
+       * The gap above the bar is padding inside the dock, so the hover area reaches the top
+       * edge: a pointer resting where the handle was stays inside the bar once it comes down.
+       */
+      .dock {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: calc(12px + env(safe-area-inset-top, 0px));
+        transition: transform 220ms ease-out;
+      }
+      /* Tucks away after a short grace period, so a slip of the pointer doesn't hide it. */
+      .dock.hidden { transform: translateY(calc(-100% + 14px)); transition-delay: 300ms; }
+      .dock.hidden.settling { transition-delay: 0s; }
       /* Resting on the handle, or tabbing into the bar, brings it down while you're there. */
-      .dock.hidden:hover, .dock.hidden:focus-within { transform: none; transition-delay: 250ms; }
+      .dock.hidden:not(.settling):hover, .dock.hidden:not(.settling):focus-within { transform: none; transition-delay: 200ms; }
       /* Tucked away, the bar's shadow would show as a line along the top edge. */
-      .dock.hidden:not(:hover):not(:focus-within) .bar { box-shadow: none; }
+      .dock.hidden.settling .bar, .dock.hidden:not(:hover):not(:focus-within) .bar { box-shadow: none; }
       .handle {
         display: grid;
         place-items: center;
@@ -165,11 +184,11 @@ export class CorktackStudy extends LitElement {
       const goal = this.task()?.goal?.press
       if (!goal || this.phase !== 'doing' || this.flash) return
       const hook = this.config.hookAttribute
-      if (e.composedPath().some((n) => n instanceof Element && n.getAttribute(hook) === goal)) this.complete('done')
+      if (e.composedPath().some((n) => n instanceof Element && n.getAttribute(hook) === goal)) this.complete()
     }, true)
     const checkUrl = () => {
       const goal = this.task()?.goal?.url
-      if (goal && this.phase === 'doing' && !this.flash && atUrl(goal)) this.complete('done')
+      if (goal && this.phase === 'doing' && !this.flash && atUrl(goal)) this.complete()
     }
     this.on(window, 'corktack:navigate', checkUrl)
     this.on(window, 'popstate', checkUrl)
@@ -210,6 +229,13 @@ export class CorktackStudy extends LitElement {
     }
   }
 
+  /** Tucks the bar away now, even though the pointer and focus are still on it. */
+  private hide(): void {
+    this.settling = true
+    this.collapsed = true
+    ;((this.renderRoot as ShadowRoot).activeElement as HTMLElement | null)?.blur()
+  }
+
   private startTask(): void {
     const start = this.task()?.start
     if (start) navigateTo(start)
@@ -218,12 +244,12 @@ export class CorktackStudy extends LitElement {
   }
 
   /** Shows a short message, then moves to the next task or the thank you. */
-  private complete(outcome: 'done' | 'stuck'): void {
+  private complete(): void {
     this.collapsed = false
-    this.flash = outcome
+    this.flash = true
     clearTimeout(this.flashTimer)
     this.flashTimer = window.setTimeout(() => {
-      this.flash = ''
+      this.flash = false
       if (this.index + 1 < this.config.study.tasks.length) {
         this.index++
         this.phase = 'brief'
@@ -243,7 +269,7 @@ export class CorktackStudy extends LitElement {
 
     if (this.flash) {
       return html`<div class="bar" role="status">
-        <div class="flash">${circleCheck}${this.flash === 'done' ? 'Task done' : 'No problem, moving on'}</div>
+        <div class="flash">${circleCheck}Task done</div>
       </div>`
     }
 
@@ -276,11 +302,10 @@ export class CorktackStudy extends LitElement {
       </div>
       <div class="actions">
         ${doing
-          ? html`<button class="button" @click=${() => this.complete('stuck')}>I’m stuck</button>
-              <button class="button primary" @click=${() => this.complete('done')}>Done</button>
+          ? html`<button class="button primary" @click=${() => this.complete()}>Done</button>
               ${this.collapsed
                 ? html`<button class="icon-button" aria-label="Keep task open" title="Keep task open" @click=${() => (this.collapsed = false)}>${chevronDown}</button>`
-                : html`<button class="icon-button" aria-label="Hide task" title="Hide task" @click=${() => (this.collapsed = true)}>${chevronUp}</button>`}`
+                : html`<button class="icon-button" aria-label="Hide task" title="Hide task" @click=${() => this.hide()}>${chevronUp}</button>`}`
           : html`<button class="button primary" @click=${() => this.startTask()}>Start task</button>`}
       </div>
     </div>`
@@ -293,9 +318,20 @@ export class CorktackStudy extends LitElement {
         ? `Task ${this.index + 1} of ${this.config.study.tasks.length}: ${this.task().title}`
         : ''
     return html`
-      <section aria-label="Study" class="dock ${this.collapsed && this.phase === 'doing' && !this.flash ? 'hidden' : ''}">
+      <section
+        aria-label="Study"
+        class="dock ${this.collapsed && this.phase === 'doing' && !this.flash ? 'hidden' : ''} ${this.settling ? 'settling' : ''}"
+        @focusin=${() => (this.settling = false)}
+      >
         ${keyed(`${this.phase}-${this.index}-${this.flash}`, this.content())}
-        <button class="handle" aria-label="Show task" title="Show task" tabindex=${this.collapsed ? 0 : -1} @click=${() => (this.collapsed = false)}></button>
+        <button
+          class="handle"
+          aria-label="Show task"
+          title="Show task"
+          tabindex=${this.collapsed ? 0 : -1}
+          @pointermove=${() => (this.settling = false)}
+          @click=${() => (this.collapsed = false)}
+        ></button>
       </section>
       <p class="sr-only" aria-live="polite">${announcement}</p>
     `
