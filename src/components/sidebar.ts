@@ -8,8 +8,6 @@ import { avatarColour, define, initials, plural, timeAgo } from '../util'
 export interface SidebarSection {
   /** Null for the comments placed on this page, which come first with no heading. */
   title: string | null
-  /** A line under the heading. */
-  note?: string
   items: FeedbackComment[]
 }
 
@@ -91,7 +89,6 @@ export class CtSidebar extends LitElement {
       }
       .count { display: block; margin-top: 4px; }
       .empty { margin: 8px; color: var(--text-secondary); }
-      .note { margin: 0 8px 4px; font-size: 12px; color: var(--text-secondary); }
     `,
   ]
 
@@ -147,7 +144,7 @@ export class CtSidebar extends LitElement {
             : nothing}
         ${this.sections.map((s) =>
           s.items.length
-            ? html`${s.title ? html`<h3>${s.title}</h3>` : nothing}${s.note ? html`<p class="note">${s.note}</p>` : nothing}${this.list(s.items)}`
+            ? html`${s.title ? html`<h3>${s.title}</h3>` : nothing}${this.list(s.items)}`
             : nothing,
         )}
       </section>

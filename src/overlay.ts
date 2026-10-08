@@ -536,11 +536,7 @@ export class CorktackOverlay extends LitElement {
     for (const c of all) if (c.route !== route) elsewhere.set(c.route, [...(elsewhere.get(c.route) ?? []), c])
     return [
       { title: null, items: here.filter((c) => this.positions.get(c.id)) },
-      {
-        title: 'Not visible right now',
-        note: 'These may be inside something that’s closed, like a drawer or menu.',
-        items: here.filter((c) => this.positions.has(c.id) && !this.positions.get(c.id)),
-      },
+      { title: 'Not visible right now', items: here.filter((c) => this.positions.has(c.id) && !this.positions.get(c.id)) },
       // Threads are newest first, so each page's first item is its latest comment.
       ...[...elsewhere].map(([page, items]) => ({ title: page === '/' || page.endsWith('#/') ? 'Home' : page, items })),
     ]
