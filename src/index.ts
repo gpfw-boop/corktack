@@ -8,6 +8,8 @@ export { supabaseAdapter, type SupabaseAdapterOptions } from './supabase'
 
 const MODE_KEY = 'corktack:mode'
 const STUDY_KEY = 'corktack:study'
+/** How the running study was opened: 'link' for participants, 'toggle' for the owner switching in. */
+const STUDY_SOURCE_KEY = 'corktack:study-source'
 const STUDY_PARAM = 'study'
 
 /**
@@ -44,6 +46,7 @@ function activeStudy(studies: FeedbackOptions['studies']): string | null {
         // A new study, or a different one: start it from the welcome.
         if (current) sessionStorage.removeItem(studyProgressKey(current))
         sessionStorage.setItem(STUDY_KEY, value)
+        sessionStorage.setItem(STUDY_SOURCE_KEY, 'link')
       } else {
         console.warn(`[corktack] No study called "${value}". Add it to initFeedback({ studies }).`)
       }
@@ -61,16 +64,27 @@ function endStudy(forget = true): void {
     const id = sessionStorage.getItem(STUDY_KEY)
     if (id && forget) sessionStorage.removeItem(studyProgressKey(id))
     sessionStorage.removeItem(STUDY_KEY)
+    sessionStorage.removeItem(STUDY_SOURCE_KEY)
   } catch {
     // Nothing kept.
   }
 }
 
+/** Starts a study from the toolbar's switch, so the study bar offers a way back. */
 function setStudy(id: string): void {
   try {
     sessionStorage.setItem(STUDY_KEY, id)
+    sessionStorage.setItem(STUDY_SOURCE_KEY, 'toggle')
   } catch {
     // The study lasts until the page reloads.
+  }
+}
+
+function openedByToggle(): boolean {
+  try {
+    return sessionStorage.getItem(STUDY_SOURCE_KEY) === 'toggle'
+  } catch {
+    return false
   }
 }
 
@@ -139,6 +153,8 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
         id,
         study: studies[id],
         hookAttribute: config.hookAttribute,
+        // Participants who came by the study link stay in the study until they finish.
+        canSwitch: openedByToggle(),
         // Switching keeps their place, so switching back carries on where they were.
         onSwitch: () => leaveStudy(false),
         onEnd: () => leaveStudy(true),

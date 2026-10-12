@@ -21,6 +21,8 @@ export interface StudyConfig {
   onEnd: () => void
   /** Swaps back to comments, keeping progress so switching back carries on. */
   onSwitch: () => void
+  /** Show the switch back to comments. Off for participants who came by the study link. */
+  canSwitch: boolean
 }
 
 /**
@@ -262,6 +264,7 @@ export class CorktackStudy extends LitElement {
   }
 
   private switchButton() {
+    if (!this.config.canSwitch) return nothing
     return html`<button class="icon-button" aria-label="Switch to feedback" title="Switch to feedback" @click=${() => this.config.onSwitch()}>${messageCircle}</button>`
   }
 

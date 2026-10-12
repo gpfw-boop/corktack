@@ -79,7 +79,7 @@ Pins attach to elements. Corktack finds them again even after classes and Vue's 
 
 ## 5. Studies (only if the user asks for one)
 
-A study takes a participant through tasks, with the instructions shown at the top of the prototype. Comments are hidden while a study runs. With studies set up, the toolbar gets a switch to testing, and the study bar has a switch back to feedback. Put studies in their own file and pass them in:
+A study takes a participant through tasks, with the instructions shown at the top of the prototype. Comments are hidden while a study runs. With studies set up, the toolbar gets a switch to testing, and the study bar has a switch back to feedback. Participants who arrive by a `?study=` link don't get the switch back, so they stay in the study until they finish. Put studies in their own file and pass them in:
 
 ```ts
 // src/studies.ts
@@ -127,7 +127,7 @@ Start the dev server and open the prototype.
 
 - The comment toolbar shows at the bottom centre of every page. Press C, click something, write a comment and post it. Reload: the pin is still there.
 - Opening the page with `?feedback=0` turns Corktack off for that browser tab, and `?feedback=1` turns it back on.
-- With studies, the last toolbar button switches to testing, and the speech bubble in the study bar switches back.
+- With studies, the last toolbar button switches to testing, and the speech bubble in the study bar switches back. Opened by a `?study=` link, the study bar has no switch back.
 - For a study, open `?study=<id>` and run through each task. Check each goal finishes its task. `?study=off` ends it.
 - The browser console should show no `[corktack]` warnings. A warning about loading comments usually means the environment variables are missing; restart the dev server after editing `.env.local`.
 

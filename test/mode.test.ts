@@ -70,6 +70,23 @@ describe('switching between commenting and testing', () => {
     expect(mounted[1].studies).toEqual([{ id: 'roster', title: 'Roster check' }])
   })
 
+  it('keeps participants who came by the study link in the study, even after a reload', async () => {
+    const hasSwitch = () => !!studyBar()!.shadowRoot!.querySelector('[aria-label="Switch to feedback"]')
+    history.replaceState(null, '', '/?study=roster')
+    stop = initFeedback({ studies: { roster: study } })
+    await vi.waitFor(() => expect(studyBar()).not.toBeNull())
+    await studyBar()!.updateComplete
+    expect(hasSwitch()).toBe(false)
+    stop()
+
+    history.replaceState(null, '', '/')
+    stop = initFeedback({ studies: { roster: study } })
+    await vi.waitFor(() => expect(studyBar()).not.toBeNull())
+    await studyBar()!.updateComplete
+    expect(hasSwitch()).toBe(false)
+    expect(overlay()).toBeNull()
+  })
+
   it('swaps comments for a study and back, keeping the study’s place', async () => {
     stop = initFeedback({ studies: { roster: study } })
     await settle()

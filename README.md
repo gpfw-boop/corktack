@@ -36,7 +36,7 @@ The comment toolbar shows on every page. Open a page with `?feedback=0` to turn 
 
 ## Run a study
 
-Take someone through tasks with the instructions shown at the top of the prototype. Add studies to `initFeedback`, then send them `?study=<id>`, or use the switch at the end of the toolbar. Comments are hidden while a study runs, and the speech bubble in the study bar switches back.
+Take someone through tasks with the instructions shown at the top of the prototype. Add studies to `initFeedback`, then send them `?study=<id>`, or use the switch at the end of the toolbar. Comments are hidden while a study runs. If you switched in from the toolbar, the speech bubble in the study bar switches back; people who arrive by the study link stay in the study until they finish. The switch only shows when the prototype has studies.
 
 ```ts
 initFeedback({
