@@ -105,11 +105,12 @@ export interface FeedbackOptions {
   hookAttribute?: string
   /** How to derive the current route. Defaults to pathname, plus the hash when it looks like a hash route. */
   getRoute?: () => string
-  /** Show the hidden tab at the bottom of the page that turns comments on. Defaults to true. */
+  /** @deprecated No longer used: comments are always on unless the page is opened with ?feedback=0. */
   launcher?: boolean
   /**
    * Studies to take participants through, keyed by id. Open one with
-   * ?study=<id>; comments stay off for the whole study. ?study=off ends it.
+   * ?study=<id>, or switch to it from the toolbar. Comments are hidden while a
+   * study runs. ?study=off ends it.
    */
   studies?: Record<string, Study>
 }

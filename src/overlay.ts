@@ -25,8 +25,10 @@ export interface OverlayConfig {
   adapter: StorageAdapter
   hookAttribute: string
   getRoute: () => string
-  /** Turns comments off: removes the overlay and brings the tab back. */
-  onClose: () => void
+  /** The prototype's studies, for the switch to testing. Empty when it has none. */
+  studies: Array<{ id: string; title: string }>
+  /** Swaps the comments for a study. */
+  onSwitchToStudy: (id: string) => void
 }
 
 type Point = { x: number; y: number }
@@ -340,7 +342,7 @@ export class CorktackOverlay extends LitElement {
     if (action === 'comment') this.setCommenting(!this.commenting)
     if (action === 'visibility') this.setVisible(!this.visible)
     if (action === 'list') this.listOpen = !this.listOpen
-    if (action === 'close') this.config.onClose()
+    if (action === 'study' && this.config.studies.length === 1) this.config.onSwitchToStudy(this.config.studies[0].id)
   }
 
   private startCompose(el: Element, x: number, y: number): void {
@@ -559,7 +561,9 @@ export class CorktackOverlay extends LitElement {
         .commenting=${this.commenting}
         .visible=${this.visible}
         .listOpen=${this.listOpen}
+        .studies=${this.config.studies}
         @ct-action=${(e: CustomEvent<ToolbarAction>) => this.onToolbar(e.detail)}
+        @ct-study=${(e: CustomEvent<string>) => this.config.onSwitchToStudy(e.detail)}
       ></ct-toolbar>
     `
   }

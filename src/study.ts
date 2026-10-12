@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from 'lit'
 import { state } from 'lit/decorators.js'
 import { keyed } from 'lit/directives/keyed.js'
-import { chevronDown, chevronUp, circleCheck } from './icons'
+import { chevronDown, chevronUp, circleCheck, messageCircle } from './icons'
 import { base, tokens } from './styles'
 import type { Study } from './types'
 import { define, navigateTo, studyProgressKey as progressKey } from './util'
@@ -17,8 +17,10 @@ export interface StudyConfig {
   id: string
   study: Study
   hookAttribute: string
-  /** Ends the study: removes the bar and forgets progress. */
+  /** Ends the study: removes the bar, forgets progress and brings comments back. */
   onEnd: () => void
+  /** Swaps back to comments, keeping progress so switching back carries on. */
+  onSwitch: () => void
 }
 
 /**
@@ -259,6 +261,10 @@ export class CorktackStudy extends LitElement {
     }, FLASH_MS)
   }
 
+  private switchButton() {
+    return html`<button class="icon-button" aria-label="Switch to feedback" title="Switch to feedback" @click=${() => this.config.onSwitch()}>${messageCircle}</button>`
+  }
+
   private step() {
     return html`<span class="step">Task ${this.index + 1} of ${this.config.study.tasks.length}</span>`
   }
@@ -279,7 +285,7 @@ export class CorktackStudy extends LitElement {
           <h2>${study.title}</h2>
           <p class="muted">${study.intro ?? `${study.tasks.length} short tasks. There are no wrong answers: we’re testing the design, not you.`}</p>
         </div>
-        <div class="actions"><button class="button primary" @click=${() => (this.phase = 'brief')}>Start</button></div>
+        <div class="actions"><button class="button primary" @click=${() => (this.phase = 'brief')}>Start</button>${this.switchButton()}</div>
       </div>`
     }
 
@@ -289,7 +295,7 @@ export class CorktackStudy extends LitElement {
           <h2>That’s everything</h2>
           <p class="muted">Thanks for your time.</p>
         </div>
-        <div class="actions"><button class="button primary" @click=${() => this.config.onEnd()}>Finish</button></div>
+        <div class="actions"><button class="button primary" @click=${() => this.config.onEnd()}>Finish</button>${this.switchButton()}</div>
       </div>`
     }
 
@@ -307,6 +313,7 @@ export class CorktackStudy extends LitElement {
                 ? html`<button class="icon-button" aria-label="Keep task open" title="Keep task open" @click=${() => (this.collapsed = false)}>${chevronDown}</button>`
                 : html`<button class="icon-button" aria-label="Hide task" title="Hide task" @click=${() => this.hide()}>${chevronUp}</button>`}`
           : html`<button class="button primary" @click=${() => this.startTask()}>Start task</button>`}
+        ${this.switchButton()}
       </div>
     </div>`
   }

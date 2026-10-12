@@ -62,7 +62,7 @@ Keep whatever the file already does; only add the import and the call.
 
 - `project` keeps this prototype's comments apart from others in the same Supabase project. Use the prototype's name in lowercase with hyphens, and never reuse another prototype's name.
 - With server-side rendering (Nuxt, Next and so on), call it only in the browser, such as in a client-only plugin or effect.
-- Other options, all optional: `launcher: false` hides the "Add feedback" tab, `param` renames the `?feedback=1` switch, `hookAttribute` renames `data-feedback`, and `getRoute` changes how pages are grouped.
+- Other options, all optional: `param` renames the `?feedback=` switch, `hookAttribute` renames `data-feedback`, and `getRoute` changes how pages are grouped.
 
 ## 4. Add `data-feedback` hooks
 
@@ -79,7 +79,7 @@ Pins attach to elements. Corktack finds them again even after classes and Vue's 
 
 ## 5. Studies (only if the user asks for one)
 
-A study takes a participant through tasks, with the instructions shown at the top of the prototype. Comments stay off during a study. Put studies in their own file and pass them in:
+A study takes a participant through tasks, with the instructions shown at the top of the prototype. Comments are hidden while a study runs. With studies set up, the toolbar gets a switch to testing, and the study bar has a switch back to feedback. Put studies in their own file and pass them in:
 
 ```ts
 // src/studies.ts
@@ -125,8 +125,9 @@ initFeedback({ project: 'roster-prototype', adapter: supabaseAdapter({ … }), s
 
 Start the dev server and open the prototype.
 
-- Hover the small tab at the bottom centre of the page and click "Add feedback". The toolbar appears. Press C, click something, write a comment and post it. Reload: the pin is still there.
-- Opening the page with `?feedback=1` turns comments on directly, and the × in the toolbar turns them off.
+- The comment toolbar shows at the bottom centre of every page. Press C, click something, write a comment and post it. Reload: the pin is still there.
+- Opening the page with `?feedback=0` turns Corktack off for that browser tab, and `?feedback=1` turns it back on.
+- With studies, the last toolbar button switches to testing, and the speech bubble in the study bar switches back.
 - For a study, open `?study=<id>` and run through each task. Check each goal finishes its task. `?study=off` ends it.
 - The browser console should show no `[corktack]` warnings. A warning about loading comments usually means the environment variables are missing; restart the dev server after editing `.env.local`.
 

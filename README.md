@@ -32,11 +32,11 @@ initFeedback({
 })
 ```
 
-A small tab peeks up from the bottom of the page. Hover it and click to turn comments on, and use the × in the toolbar to turn them off. Links with `?feedback=1` turn comments on straight away. To hide the tab on a prototype, pass `launcher: false`. Leave out `adapter` to keep comments in your own browser only.
+The comment toolbar shows on every page. Open a page with `?feedback=0` to turn Corktack off for that browser tab, and `?feedback=1` to turn it back on. Leave out `adapter` to keep comments in your own browser only.
 
 ## Run a study
 
-Take someone through tasks with the instructions shown at the top of the prototype. Add studies to `initFeedback`, then send them `?study=<id>`. Comments stay off for the whole study.
+Take someone through tasks with the instructions shown at the top of the prototype. Add studies to `initFeedback`, then send them `?study=<id>`, or use the switch at the end of the toolbar. Comments are hidden while a study runs, and the speech bubble in the study bar switches back.
 
 ```ts
 initFeedback({

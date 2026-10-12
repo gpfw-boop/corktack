@@ -1,7 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { initFeedback } from '../src/index'
 import type { Study } from '../src/types'
+
+// Stand-in for the comments overlay, which shows whenever a study isn't running.
+vi.mock('../src/overlay', () => ({
+  mountOverlay: () => {
+    const el = document.createElement('corktack-overlay')
+    document.body.append(el)
+    return el
+  },
+}))
+
+const { initFeedback } = await import('../src/index')
+const settle = () => new Promise((r) => setTimeout(r, 0))
 
 const study: Study = {
   title: 'Roster check',
@@ -40,7 +51,6 @@ describe('study mode', () => {
     stop = initFeedback({ studies: { roster: study } })
     await ready()
     expect(text()).toContain('Roster check')
-    expect(document.querySelector('corktack-launcher')).toBeNull()
     expect(document.querySelector('corktack-overlay')).toBeNull()
   })
 
@@ -78,6 +88,10 @@ describe('study mode', () => {
     press('Finish')
     expect(bar()).toBeNull()
     expect(sessionStorage.getItem('corktack:study')).toBeNull()
+    // Comments come back once the study is over.
+    vi.useRealTimers()
+    await settle()
+    expect(document.querySelector('corktack-overlay')).not.toBeNull()
   })
 
   it('moves on when they press Done, with or without a goal', async () => {
@@ -147,7 +161,8 @@ describe('study mode', () => {
     history.replaceState(null, '', '/?study=nope')
     stop = initFeedback({ studies: { roster: study } })
     expect(warn).toHaveBeenCalled()
-    expect(document.querySelector('corktack-launcher')).not.toBeNull()
+    await settle()
+    expect(document.querySelector('corktack-overlay')).not.toBeNull()
     stop()
 
     history.replaceState(null, '', '/?study=roster')
@@ -157,7 +172,8 @@ describe('study mode', () => {
     history.replaceState(null, '', '/?study=off')
     stop = initFeedback({ studies: { roster: study } })
     expect(sessionStorage.getItem('corktack:study')).toBeNull()
-    expect(document.querySelector('corktack-launcher')).not.toBeNull()
+    await settle()
+    expect(document.querySelector('corktack-overlay')).not.toBeNull()
     warn.mockRestore()
   })
 })

@@ -1,4 +1,3 @@
-import { mountLauncher } from './launcher'
 import { localAdapter } from './storage'
 import type { FeedbackOptions } from './types'
 import { defaultRoute, studyProgressKey } from './util'
@@ -12,30 +11,21 @@ const STUDY_KEY = 'corktack:study'
 const STUDY_PARAM = 'study'
 
 /**
- * Reads the activation parameter. The mode is kept in sessionStorage so it
+ * Comments are on unless turned off. The choice is kept in sessionStorage so it
  * survives client-side navigation (Vue Router often drops query strings).
  *
- *   ?feedback=1    turn feedback on
- *   ?feedback=off  turn it off again
+ *   ?feedback=0    turn Corktack off for this tab (?feedback=off works too)
+ *   ?feedback=1    turn it back on
  */
-function isActive(param: string): boolean {
+function isOff(param: string): boolean {
   const value = new URLSearchParams(window.location.search).get(param)
-  const off = value === 'off' || value === '0'
-  if (off) setMode(false)
-  else if (value !== null) setMode(true)
+  const off = value === '0' || value === 'off'
   try {
-    return sessionStorage.getItem(MODE_KEY) === 'on'
+    if (off) sessionStorage.setItem(MODE_KEY, 'off')
+    else if (value !== null) sessionStorage.removeItem(MODE_KEY)
+    return sessionStorage.getItem(MODE_KEY) === 'off'
   } catch {
-    return value !== null && !off
-  }
-}
-
-function setMode(on: boolean): void {
-  try {
-    if (on) sessionStorage.setItem(MODE_KEY, 'on')
-    else sessionStorage.removeItem(MODE_KEY)
-  } catch {
-    // Without sessionStorage, the mode lasts until the page reloads.
+    return off
   }
 }
 
@@ -65,13 +55,22 @@ function activeStudy(studies: FeedbackOptions['studies']): string | null {
   }
 }
 
-function endStudy(): void {
+/** Leaves the running study. `forget` also drops its progress, so it starts again from the welcome. */
+function endStudy(forget = true): void {
   try {
     const id = sessionStorage.getItem(STUDY_KEY)
-    if (id) sessionStorage.removeItem(studyProgressKey(id))
+    if (id && forget) sessionStorage.removeItem(studyProgressKey(id))
     sessionStorage.removeItem(STUDY_KEY)
   } catch {
     // Nothing kept.
+  }
+}
+
+function setStudy(id: string): void {
+  try {
+    sessionStorage.setItem(STUDY_KEY, id)
+  } catch {
+    // The study lasts until the page reloads.
   }
 }
 
@@ -95,16 +94,17 @@ function watchNavigation(): void {
 }
 
 /**
- * Adds Corktack to the page. Visitors see only a sliver of a tab at the bottom
- * edge; clicking it, or opening the page with ?feedback=1, turns comments on.
- * Nothing else loads until then. Returns a function that removes everything.
+ * Adds Corktack to the page: comments are on for everyone unless the page is
+ * opened with ?feedback=0. Prototypes with studies get a switch between
+ * commenting and testing. Returns a function that removes everything.
  */
 export function initFeedback(options: FeedbackOptions = {}): () => void {
   if (typeof window === 'undefined') return () => {}
   const param = options.param ?? 'feedback'
+  const studies = options.studies ?? {}
 
   let overlay: HTMLElement | undefined
-  let removeLauncher: (() => void) | undefined
+  let studyBar: HTMLElement | undefined
   let removed = false
 
   const config = {
@@ -113,61 +113,55 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
     adapter: options.adapter ?? localAdapter(),
     hookAttribute: options.hookAttribute ?? 'data-feedback',
     getRoute: options.getRoute ?? defaultRoute,
-    onClose: () => {
-      setMode(false)
+    studies: Object.entries(studies).map(([id, study]) => ({ id, title: study.title })),
+    onSwitchToStudy: (id: string) => {
       overlay?.remove()
       overlay = undefined
-      showLauncher()
+      setStudy(id)
+      runStudy(id)
     },
   }
 
-  // The UI (and Lit) load only when comments are turned on, so normal visitors don't pay for them.
+  // The UI and Lit load on demand, in their own chunks.
   const open = () => {
     watchNavigation()
     void import('./overlay').then(({ mountOverlay }) => {
-      if (!removed && !overlay) overlay = mountOverlay(config)
+      if (!removed && !overlay && !studyBar) overlay = mountOverlay(config)
     })
   }
 
-  const showLauncher = () => {
-    // Bundled with the core rather than loaded on demand, so visitors make no extra requests.
-    if (removed || overlay || options.launcher === false) return
-    removeLauncher = mountLauncher(() => {
-      removeLauncher?.()
-      removeLauncher = undefined
-      setMode(true)
-      open()
-    })
-  }
-
-  // A study keeps comments, pins and the tab away for its whole run.
-  const study = activeStudy(options.studies)
-  let studyBar: HTMLElement | undefined
+  // A study keeps comments and pins away while it runs.
   const runStudy = (id: string) => {
     watchNavigation()
     void import('./study').then(({ mountStudy }) => {
-      if (removed) return
+      if (removed || !studies[id]) return
       studyBar = mountStudy({
         id,
-        study: options.studies![id],
+        study: studies[id],
         hookAttribute: config.hookAttribute,
-        onEnd: () => {
-          endStudy()
-          studyBar?.remove()
-          studyBar = undefined
-        },
+        // Switching keeps their place, so switching back carries on where they were.
+        onSwitch: () => leaveStudy(false),
+        onEnd: () => leaveStudy(true),
       })
     })
   }
 
-  const start = () => (study ? runStudy(study) : isActive(param) ? open() : showLauncher())
+  const leaveStudy = (forget: boolean) => {
+    endStudy(forget)
+    studyBar?.remove()
+    studyBar = undefined
+    open()
+  }
+
+  const study = activeStudy(studies)
+  const off = isOff(param)
+  const start = () => (study ? runStudy(study) : off ? undefined : open())
   if (document.body) start()
   else document.addEventListener('DOMContentLoaded', start, { once: true })
 
   return () => {
     removed = true
     overlay?.remove()
-    removeLauncher?.()
     studyBar?.remove()
   }
 }
