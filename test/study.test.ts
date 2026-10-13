@@ -156,6 +156,32 @@ describe('study mode', () => {
     expect(dock().classList.contains('hidden')).toBe(false)
   })
 
+  it('tucks itself away a few seconds into a task, and comes back from its "1 of 2" handle', async () => {
+    history.replaceState(null, '', '/?study=roster')
+    stop = initFeedback({ studies: { roster: study } })
+    await ready()
+    press('Start')
+    await rendered()
+    vi.useFakeTimers()
+    press('Start task')
+    await rendered()
+    const dock = () => bar()!.shadowRoot!.querySelector('.dock')!
+    const handle = () => bar()!.shadowRoot!.querySelector('.handle') as HTMLElement
+    expect(dock().classList.contains('hidden')).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(5100)
+    await rendered()
+    expect(dock().classList.contains('hidden')).toBe(true)
+    expect(handle().textContent!.trim()).toBe('1 of 2')
+
+    handle().click()
+    await rendered()
+    expect(dock().classList.contains('hidden')).toBe(false)
+    await vi.advanceTimersByTimeAsync(5100)
+    await rendered()
+    expect(dock().classList.contains('hidden')).toBe(true)
+  })
+
   it('ignores a study the prototype doesn’t have, and ends with ?study=off', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     history.replaceState(null, '', '/?study=nope')

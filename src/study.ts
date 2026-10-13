@@ -33,6 +33,8 @@ type Phase = 'welcome' | 'brief' | 'doing' | 'finished'
 
 /** How long the "done" or "moving on" message shows before the next task. */
 const FLASH_MS = 1400
+/** How long the bar stays down during a task before tucking itself away, unless the pointer or focus is on it. */
+const AUTO_HIDE_MS = 5000
 
 /** True when the current address meets the goal: same path, and the goal's query and hash if it has them. */
 function atUrl(goal: string): boolean {
@@ -61,6 +63,7 @@ export class CorktackStudy extends LitElement {
 
   private teardown: Array<() => void> = []
   private flashTimer = 0
+  private autoHideTimer = 0
 
   static styles = [
     tokens,
@@ -136,24 +139,28 @@ export class CorktackStudy extends LitElement {
         transition: transform 220ms ease-out;
       }
       /* Tucks away after a short grace period, so a slip of the pointer doesn't hide it. */
-      .dock.hidden { transform: translateY(calc(-100% + 14px)); transition-delay: 300ms; }
+      .dock.hidden { transform: translateY(calc(-100% + 24px)); transition-delay: 300ms; }
       .dock.hidden.settling { transition-delay: 0s; }
       /* Resting on the handle, or tabbing into the bar, brings it down while you're there. */
       .dock.hidden:not(.settling):hover, .dock.hidden:not(.settling):focus-within { transform: none; transition-delay: 200ms; }
       /* Tucked away, the bar's shadow would show as a line along the top edge. */
       .dock.hidden.settling .bar, .dock.hidden:not(:hover):not(:focus-within) .bar { box-shadow: none; }
+      /* Shows how far through they are, e.g. "1 of 3". */
       .handle {
         display: grid;
         place-items: center;
-        width: 52px;
-        height: 14px;
-        padding: 0;
+        min-width: 56px;
+        height: 24px;
+        padding: 0 12px;
         border: 0;
-        border-radius: 0 0 10px 10px;
+        border-radius: 0 0 12px 12px;
         background: var(--surface);
         box-shadow: 0 4px 10px rgb(0 0 0 / 0.1);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
       }
-      .handle::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: var(--accent); }
       .dock:not(.hidden) .handle { visibility: hidden; }
       .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       @media (prefers-reduced-motion: reduce) {
@@ -203,6 +210,21 @@ export class CorktackStudy extends LitElement {
     this.teardown.forEach((fn) => fn())
     this.teardown = []
     clearTimeout(this.flashTimer)
+    clearTimeout(this.autoHideTimer)
+  }
+
+  /**
+   * While a task is under way and the bar is down, tucks it away after a few
+   * seconds. Waits longer if the pointer or keyboard focus is on it.
+   */
+  private scheduleAutoHide(): void {
+    clearTimeout(this.autoHideTimer)
+    if (this.phase !== 'doing' || this.collapsed || this.flash) return
+    this.autoHideTimer = window.setTimeout(() => {
+      const dock = this.renderRoot.querySelector('.dock')
+      if (dock?.matches(':hover') || dock?.matches(':focus-within')) this.scheduleAutoHide()
+      else this.collapsed = true
+    }, AUTO_HIDE_MS)
   }
 
   private on(target: EventTarget, type: string, fn: (e: Event) => void, capture = false): void {
@@ -227,6 +249,7 @@ export class CorktackStudy extends LitElement {
   }
 
   protected updated(changed: PropertyValues<this>): void {
+    if (['phase', 'collapsed', 'flash'].some((key) => changed.has(key as keyof CorktackStudy))) this.scheduleAutoHide()
     // Move focus to the next step's button, but never during a task, where focus belongs to the prototype.
     if ((changed.has('phase' as keyof CorktackStudy) || changed.has('flash' as keyof CorktackStudy)) && this.phase !== 'doing' && !this.flash) {
       this.renderRoot.querySelector<HTMLElement>('.primary')?.focus()
@@ -336,12 +359,12 @@ export class CorktackStudy extends LitElement {
         ${keyed(`${this.phase}-${this.index}-${this.flash}`, this.content())}
         <button
           class="handle"
-          aria-label="Show task"
+          aria-label=${`Show task ${this.index + 1} of ${this.config.study.tasks.length}`}
           title="Show task"
           tabindex=${this.collapsed ? 0 : -1}
           @pointermove=${() => (this.settling = false)}
           @click=${() => (this.collapsed = false)}
-        ></button>
+        >${this.index + 1} of ${this.config.study.tasks.length}</button>
       </section>
       <p class="sr-only" aria-live="polite">${announcement}</p>
     `
