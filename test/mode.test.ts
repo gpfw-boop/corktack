@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Study } from '../src/types'
 
 // Stand-in for the overlay, which loads Lit; these tests are about when it shows and switching modes.
-const mounted: Array<{ studies: Array<{ id: string; title: string }>; onSwitchToStudy: (id: string) => void }> = []
+const mounted: Array<{ studies: Array<{ id: string; title: string }>; onSwitchToStudy: (id: string) => void; onClose: () => void }> = []
 vi.mock('../src/overlay', () => ({
   mountOverlay: (config: (typeof mounted)[number]) => {
     mounted.push(config)
@@ -49,6 +49,41 @@ describe('comments are always on', () => {
     stop = initFeedback()
     await settle()
     expect(overlay()).toBeNull()
+    stop()
+
+    history.replaceState(null, '', '/?feedback=1')
+    stop = initFeedback()
+    await settle()
+    expect(overlay()).not.toBeNull()
+  })
+})
+
+describe('closing comments with the toolbar’s ×', () => {
+  const tab = () => document.querySelector('corktack-launcher')
+
+  it('leaves a tab that brings them back', async () => {
+    stop = initFeedback()
+    await settle()
+    mounted[0].onClose()
+    expect(overlay()).toBeNull()
+    expect(tab()).not.toBeNull()
+
+    ;(tab()!.shadowRoot!.querySelector('button') as HTMLElement).click()
+    await settle()
+    expect(overlay()).not.toBeNull()
+    expect(tab()).toBeNull()
+  })
+
+  it('stays closed across a reload, until ?feedback=1', async () => {
+    stop = initFeedback()
+    await settle()
+    mounted[0].onClose()
+    stop()
+
+    stop = initFeedback()
+    await settle()
+    expect(overlay()).toBeNull()
+    expect(tab()).not.toBeNull()
     stop()
 
     history.replaceState(null, '', '/?feedback=1')

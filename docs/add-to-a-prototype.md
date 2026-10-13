@@ -126,7 +126,7 @@ initFeedback({ project: 'roster-prototype', adapter: supabaseAdapter({ … }), s
 Start the dev server and open the prototype.
 
 - The comment toolbar shows at the bottom centre of every page. Press C, click something, write a comment and post it. Reload: the pin is still there.
-- Opening the page with `?feedback=0` turns Corktack off for that browser tab, and `?feedback=1` turns it back on.
+- The × at the end of the toolbar closes comments, leaving a small "Add feedback" tab at the bottom that reopens them. Opening the page with `?feedback=0` turns Corktack off completely for that browser tab, and `?feedback=1` turns it back on.
 - With studies, the last toolbar button switches to testing, and the speech bubble in the study bar switches back. Opened by a `?study=` link, the study bar has no switch back.
 - For a study, open `?study=<id>` and run through each task. Check each goal finishes its task. `?study=off` ends it.
 - The browser console should show no `[corktack]` warnings. A warning about loading comments usually means the environment variables are missing; restart the dev server after editing `.env.local`.

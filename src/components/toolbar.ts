@@ -1,10 +1,10 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { property, state } from 'lit/decorators.js'
-import { eye, eyeOff, list, listChecks, messageCircle } from '../icons'
+import { eye, eyeOff, list, listChecks, messageCircle, x } from '../icons'
 import { base } from '../styles'
 import { define } from '../util'
 
-export type ToolbarAction = 'comment' | 'visibility' | 'list' | 'study'
+export type ToolbarAction = 'comment' | 'visibility' | 'list' | 'study' | 'close'
 
 /**
  * Floating toolbar, bottom centre. Fires `ct-action` with the action name, and
@@ -125,8 +125,7 @@ export class CtToolbar extends LitElement {
 
   private studySwitch() {
     const several = this.studies.length > 1
-    return html`<span class="divider" aria-hidden="true"></span>
-      <div class="wrap" @focusout=${(e: FocusEvent) => {
+    return html`<div class="wrap" @focusout=${(e: FocusEvent) => {
         if (!(e.currentTarget as Element).contains(e.relatedTarget as Node)) this.menuOpen = false
       }}>
         <button
@@ -161,7 +160,9 @@ export class CtToolbar extends LitElement {
       ${this.button('comment', 'Comment', 'C', this.commenting, messageCircle)}
       ${this.button('visibility', this.visible ? 'Hide comments' : 'Show comments', 'Shift+C', !this.visible, this.visible ? eye : eyeOff)}
       ${this.button('list', this.listOpen ? 'Hide comments list' : 'Show comments list', null, this.listOpen, list)}
+      <span class="divider" aria-hidden="true"></span>
       ${this.studies.length ? this.studySwitch() : nothing}
+      ${this.button('close', 'Turn off comments', null, null, x)}
     `
   }
 }

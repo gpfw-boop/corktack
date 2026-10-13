@@ -1,3 +1,4 @@
+import { mountLauncher } from './launcher'
 import { localAdapter } from './storage'
 import type { FeedbackOptions } from './types'
 import { defaultRoute, studyProgressKey } from './util'
@@ -7,6 +8,8 @@ export { localAdapter } from './storage'
 export { supabaseAdapter, type SupabaseAdapterOptions } from './supabase'
 
 const MODE_KEY = 'corktack:mode'
+/** Set when comments were closed with the toolbar's ×, so only the tab shows until they're reopened. */
+const CLOSED_KEY = 'corktack:closed'
 const STUDY_KEY = 'corktack:study'
 /** How the running study was opened: 'link' for participants, 'toggle' for the owner switching in. */
 const STUDY_SOURCE_KEY = 'corktack:study-source'
@@ -17,14 +20,17 @@ const STUDY_PARAM = 'study'
  * survives client-side navigation (Vue Router often drops query strings).
  *
  *   ?feedback=0    turn Corktack off for this tab (?feedback=off works too)
- *   ?feedback=1    turn it back on
+ *   ?feedback=1    turn it back on, and reopen comments closed with the toolbar's ×
  */
 function isOff(param: string): boolean {
   const value = new URLSearchParams(window.location.search).get(param)
   const off = value === '0' || value === 'off'
   try {
     if (off) sessionStorage.setItem(MODE_KEY, 'off')
-    else if (value !== null) sessionStorage.removeItem(MODE_KEY)
+    else if (value !== null) {
+      sessionStorage.removeItem(MODE_KEY)
+      sessionStorage.removeItem(CLOSED_KEY)
+    }
     return sessionStorage.getItem(MODE_KEY) === 'off'
   } catch {
     return off
@@ -80,6 +86,23 @@ function setStudy(id: string): void {
   }
 }
 
+function isClosed(): boolean {
+  try {
+    return sessionStorage.getItem(CLOSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function setClosed(closed: boolean): void {
+  try {
+    if (closed) sessionStorage.setItem(CLOSED_KEY, '1')
+    else sessionStorage.removeItem(CLOSED_KEY)
+  } catch {
+    // Closed until the page reloads.
+  }
+}
+
 function openedByToggle(): boolean {
   try {
     return sessionStorage.getItem(STUDY_SOURCE_KEY) === 'toggle'
@@ -119,6 +142,7 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
 
   let overlay: HTMLElement | undefined
   let studyBar: HTMLElement | undefined
+  let removeLauncher: (() => void) | undefined
   let removed = false
 
   const config = {
@@ -128,6 +152,12 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
     hookAttribute: options.hookAttribute ?? 'data-feedback',
     getRoute: options.getRoute ?? defaultRoute,
     studies: Object.entries(studies).map(([id, study]) => ({ id, title: study.title })),
+    onClose: () => {
+      setClosed(true)
+      overlay?.remove()
+      overlay = undefined
+      showLauncher()
+    },
     onSwitchToStudy: (id: string) => {
       overlay?.remove()
       overlay = undefined
@@ -141,6 +171,17 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
     watchNavigation()
     void import('./overlay').then(({ mountOverlay }) => {
       if (!removed && !overlay && !studyBar) overlay = mountOverlay(config)
+    })
+  }
+
+  // After the toolbar's ×, a small tab at the bottom brings comments back.
+  const showLauncher = () => {
+    if (removed || overlay || studyBar || removeLauncher) return
+    removeLauncher = mountLauncher(() => {
+      removeLauncher?.()
+      removeLauncher = undefined
+      setClosed(false)
+      open()
     })
   }
 
@@ -171,7 +212,7 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
 
   const study = activeStudy(studies)
   const off = isOff(param)
-  const start = () => (study ? runStudy(study) : off ? undefined : open())
+  const start = () => (study ? runStudy(study) : off ? undefined : isClosed() ? showLauncher() : open())
   if (document.body) start()
   else document.addEventListener('DOMContentLoaded', start, { once: true })
 
@@ -179,5 +220,6 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
     removed = true
     overlay?.remove()
     studyBar?.remove()
+    removeLauncher?.()
   }
 }

@@ -29,6 +29,8 @@ export interface OverlayConfig {
   studies: Array<{ id: string; title: string }>
   /** Swaps the comments for a study. */
   onSwitchToStudy: (id: string) => void
+  /** Hides comments, leaving the small tab that brings them back. */
+  onClose: () => void
 }
 
 type Point = { x: number; y: number }
@@ -342,6 +344,7 @@ export class CorktackOverlay extends LitElement {
     if (action === 'comment') this.setCommenting(!this.commenting)
     if (action === 'visibility') this.setVisible(!this.visible)
     if (action === 'list') this.listOpen = !this.listOpen
+    if (action === 'close') this.config.onClose()
     if (action === 'study' && this.config.studies.length === 1) this.config.onSwitchToStudy(this.config.studies[0].id)
   }
 
