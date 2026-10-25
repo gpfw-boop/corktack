@@ -18,6 +18,8 @@ export class CtPin extends LitElement {
   @property({ type: Boolean, reflect: true }) active = false
   /** Shown only when resolved comments are switched on, so it's faded. */
   @property({ type: Boolean, reflect: true }) resolved = false
+  /** Someone else has added to the thread since it was last opened in this browser. */
+  @property({ type: Boolean, reflect: true }) unread = false
   /** The pin for a comment being written: no preview, not focusable. */
   @property({ type: Boolean }) draft = false
 
@@ -25,6 +27,20 @@ export class CtPin extends LitElement {
     base,
     css`
       :host { position: absolute; width: 0; height: 0; }
+      /* A blue dot on the pin's top-right edge. Hidden while the preview is open. */
+      .dot {
+        position: absolute;
+        left: 20px;
+        bottom: 20px;
+        z-index: 1;
+        width: 11px;
+        height: 11px;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        background: var(--accent);
+        pointer-events: none;
+      }
+      :host(:hover) .dot, :host(:focus-within) .dot { display: none; }
       /* Drops in from just above its point when it appears. */
       .pin { animation: drop var(--spring); transform-origin: 0 100%; }
       @keyframes drop { from { opacity: 0; transform: translateY(-8px) scale(0.6); } }
@@ -87,7 +103,7 @@ export class CtPin extends LitElement {
     return html`
       <button
         class=${this.active ? 'pin' : 'pin preview'}
-        aria-label=${`${this.author}: ${firstLine}${replies ? `, ${replies}` : ''}`}
+        aria-label=${`${this.unread ? 'Unread. ' : ''}${this.author}: ${firstLine}${replies ? `, ${replies}` : ''}`}
         aria-expanded=${String(this.active)}
       >
         ${avatar}
@@ -99,6 +115,7 @@ export class CtPin extends LitElement {
           <span class="body">${firstLine}</span>
         </span>
       </button>
+      ${this.unread ? html`<span class="dot" aria-hidden="true"></span>` : nothing}
     `
   }
 }

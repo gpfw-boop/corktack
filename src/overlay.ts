@@ -7,6 +7,7 @@ import { reviewerName } from './identity'
 import { base, pageCss, tokens } from './styles'
 import type { Anchor, CommentView, FeedbackComment, StorageAdapter } from './types'
 import { avatarColour, define, navigateTo } from './util'
+import { type Seen, type SortMode, isUnread, latestActivity, loadSeen, loadSort, markRead, saveSeen, saveSort, sortThreads } from './unread'
 import { COMMENT_PARAM, ViewRecorder, currentViewUrl, isShown, replaySteps, waitFor } from './view'
 import type { CtComposer } from './components/composer'
 import type { SidebarSection } from './components/sidebar'
@@ -69,6 +70,9 @@ export class CorktackOverlay extends LitElement {
   @state() private visible = true
   @state() private listOpen = false
   @state() private showResolved = false
+  /** What this browser has read. Loaded with the first comments. */
+  @state() private seen: Seen | null = null
+  @state() private sort: SortMode = loadSort()
   @state() private card: Card = { kind: 'none' }
   @state() private now = Date.now()
 
@@ -247,6 +251,7 @@ export class CorktackOverlay extends LitElement {
   private async reload(): Promise<void> {
     try {
       this.comments = await this.config.adapter.list(this.config.project)
+      this.seen ??= loadSeen(this.config.project, this.comments)
     } catch (e) {
       console.warn('[corktack] Could not load comments', e)
     }
@@ -416,6 +421,11 @@ export class CorktackOverlay extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues<this>): void {
+    // An open thread is read, including replies that arrive while it's open.
+    if (this.card.kind === 'thread' && (changed.has('card' as keyof CorktackOverlay) || changed.has('comments' as keyof CorktackOverlay))) {
+      const thread = this.threads().find((t) => t.id === (this.card as { id: string }).id)
+      if (thread) this.markRead([thread])
+    }
     if (changed.has('comments' as keyof CorktackOverlay) || changed.has('card' as keyof CorktackOverlay)) this.schedule()
   }
 
@@ -472,7 +482,7 @@ export class CorktackOverlay extends LitElement {
 
   // ---------------------------------------------------------------- rendering
 
-  private renderPins(threads: TopLevel[]) {
+  private renderPins(threads: TopLevel[], unread: Set<string>) {
     const activeId = this.card.kind === 'thread' ? this.card.id : null
     const placed = threads.filter((c) => this.positions.get(c.id) && (this.showResolved || !c.resolvedAt))
     return html`
@@ -485,6 +495,7 @@ export class CorktackOverlay extends LitElement {
           .replies=${this.replies(c.id).length}
           ?active=${activeId === c.id}
           ?resolved=${!!c.resolvedAt}
+          ?unread=${unread.has(c.id)}
           @click=${() => this.toggleThread(c.id)}
         ></ct-pin>`
       })}
@@ -524,16 +535,47 @@ export class CorktackOverlay extends LitElement {
     return nothing
   }
 
-  /** This page's comments, those that couldn't be placed, then other pages by their latest comment. */
-  private sections(route: string): SidebarSection[] {
-    const all = this.threads().filter((c) => this.showResolved || !c.resolvedAt)
+  /** Latest activity and unread state for every thread. */
+  private activity(): { latest: Map<string, number>; unread: Set<string> } {
+    const me = reviewerName.get()
+    const latest = new Map<string, number>()
+    const unread = new Set<string>()
+    for (const t of this.threads()) {
+      const replies = this.replies(t.id)
+      latest.set(t.id, latestActivity(t, replies))
+      if (this.seen && isUnread(t, replies, me, this.seen)) unread.add(t.id)
+    }
+    return { latest, unread }
+  }
+
+  private markRead(threads: TopLevel[]): void {
+    if (!this.seen) return
+    const next = markRead(this.seen, new Map(threads.map((t) => [t.id, latestActivity(t, this.replies(t.id))])))
+    if (next === this.seen) return
+    this.seen = next
+    saveSeen(this.config.project, next)
+  }
+
+  private setSort(mode: SortMode): void {
+    this.sort = mode
+    saveSort(mode)
+  }
+
+  /** This page's comments, those that couldn't be placed, then other pages by their latest activity, each in the chosen order. */
+  private sections(route: string, activity: { latest: Map<string, number>; unread: Set<string> }): SidebarSection[] {
+    const all = sortThreads(
+      this.threads().filter((c) => this.showResolved || !c.resolvedAt),
+      activity.latest,
+      activity.unread,
+      this.sort,
+    )
     const here = all.filter((c) => c.route === route)
     const elsewhere = new Map<string, TopLevel[]>()
     for (const c of all) if (c.route !== route) elsewhere.set(c.route, [...(elsewhere.get(c.route) ?? []), c])
     return [
       { title: null, items: here.filter((c) => this.positions.get(c.id)) },
       { title: 'Not visible right now', items: here.filter((c) => this.positions.has(c.id) && !this.positions.get(c.id)) },
-      // Threads are newest first, so each page's first item is its latest comment.
+      // Pages appear in the order of their first thread in the sorted list.
       ...[...elsewhere].map(([page, items]) => ({ title: page === '/' || page.endsWith('#/') ? 'Home' : page, items })),
     ]
   }
@@ -542,21 +584,31 @@ export class CorktackOverlay extends LitElement {
     const route = this.config.getRoute()
     const threads = this.threads().filter((c) => c.route === route)
     const replyCounts = new Map(this.threads().map((c) => [c.id, this.replies(c.id).length]))
+    // Who replied, most recent first, each once: shown as small avatars in the list.
+    const replyAuthors = new Map(this.threads().map((c) => [c.id, [...new Set(this.replies(c.id).reverse().map((r) => r.author))]]))
+    const activity = this.activity()
+    const unreadCount = this.threads().filter((c) => activity.unread.has(c.id) && (this.showResolved || !c.resolvedAt)).length
 
     return html`
-      <div class="layer">${this.visible ? this.renderPins(threads) : nothing}</div>
+      <div class="layer">${this.visible ? this.renderPins(threads, activity.unread) : nothing}</div>
       ${this.listOpen
         ? html`<ct-sidebar
-            .sections=${this.sections(route)}
+            .sections=${this.sections(route, activity)}
+            .unread=${activity.unread}
+            .unreadCount=${unreadCount}
+            .sort=${this.sort}
             ?pageEmpty=${!threads.some((c) => this.showResolved || !c.resolvedAt)}
             .resolvedCount=${this.threads().filter((c) => c.resolvedAt).length}
             ?showResolved=${this.showResolved}
             .replyCounts=${replyCounts}
+            .replyAuthors=${replyAuthors}
             .activeId=${this.card.kind === 'thread' ? this.card.id : null}
             .now=${this.now}
             @ct-select=${(e: CustomEvent<{ id: string }>) => void this.open(e.detail.id)}
             @ct-close=${() => (this.listOpen = false)}
             @ct-toggle-resolved=${() => (this.showResolved = !this.showResolved)}
+            @ct-sort=${(e: CustomEvent<SortMode>) => this.setSort(e.detail)}
+            @ct-mark-all-read=${() => this.markRead(this.threads())}
           ></ct-sidebar>`
         : nothing}
       ${this.visible ? this.renderCard() : nothing}
@@ -564,6 +616,7 @@ export class CorktackOverlay extends LitElement {
         .commenting=${this.commenting}
         .visible=${this.visible}
         .listOpen=${this.listOpen}
+        .unread=${unreadCount}
         .studies=${this.config.studies}
         @ct-action=${(e: CustomEvent<ToolbarAction>) => this.onToolbar(e.detail)}
         @ct-study=${(e: CustomEvent<string>) => this.config.onSwitchToStudy(e.detail)}

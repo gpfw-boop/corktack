@@ -3,6 +3,7 @@ import { property } from 'lit/decorators.js'
 import { x } from '../icons'
 import { base } from '../styles'
 import type { FeedbackComment } from '../types'
+import type { SortMode } from '../unread'
 import { avatarColour, define, initials, plural, timeAgo } from '../util'
 
 export interface SidebarSection {
@@ -12,8 +13,9 @@ export interface SidebarSection {
 }
 
 /**
- * Comments on this page, then comments on other pages, each newest first.
- * Fires `ct-select` with `{ id }`, `ct-toggle-resolved` and `ct-close`.
+ * Comments on this page, then comments on other pages, in the chosen order.
+ * Fires `ct-select` with `{ id }`, `ct-sort` with the order, `ct-mark-all-read`,
+ * `ct-toggle-resolved` and `ct-close`.
  */
 export class CtSidebar extends LitElement {
   @property({ attribute: false }) sections: SidebarSection[] = []
@@ -22,6 +24,10 @@ export class CtSidebar extends LitElement {
   @property({ type: Number }) resolvedCount = 0
   @property({ type: Boolean }) showResolved = false
   @property({ attribute: false }) replyCounts = new Map<string, number>()
+  @property({ attribute: false }) replyAuthors = new Map<string, string[]>()
+  @property({ attribute: false }) unread = new Set<string>()
+  @property({ type: Number }) unreadCount = 0
+  @property() sort: SortMode = 'unread'
   @property() activeId: string | null = null
   @property({ type: Number }) now = Date.now()
 
@@ -49,11 +55,31 @@ export class CtSidebar extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 12px 12px 12px 16px;
-        border-bottom: 1px solid var(--border);
+        padding: 12px 12px 8px 16px;
       }
       h2 { margin: 0; font-size: 13px; font-weight: 600; }
-      .header-actions { display: flex; align-items: center; gap: 4px; }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .controls .push { margin-left: auto; }
+      select {
+        height: 28px;
+        padding: 0 4px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      select:hover { background: var(--hover); }
+      .dot { flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+      .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       .toggle {
         height: 28px;
         padding: 0 8px;
@@ -91,7 +117,19 @@ export class CtSidebar extends LitElement {
         overflow-wrap: anywhere;
         white-space: pre-wrap;
       }
-      .count { display: block; margin-top: 4px; }
+      .count { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+      /* Who replied: small overlapping avatars, so a thread with replies stands out. */
+      .repliers { display: flex; }
+      .repliers .avatar {
+        width: 18px;
+        height: 18px;
+        margin-left: -5px;
+        border: 2px solid var(--surface);
+        font-size: 8px;
+        box-sizing: content-box;
+      }
+      .repliers .avatar:first-child { margin-left: 0; }
+      .item:hover .repliers .avatar, .item[aria-current="true"] .repliers .avatar { border-color: var(--hover); }
       .empty { margin: 8px; color: var(--text-secondary); }
     `,
   ]
@@ -116,9 +154,19 @@ export class CtSidebar extends LitElement {
                 <span class="name">${c.author}</span>
                 <time class="time" datetime=${c.createdAt}>${timeAgo(c.createdAt, this.now)}</time>
                 ${c.resolvedAt ? html`<span class="time">Resolved</span>` : nothing}
+                ${this.unread.has(c.id) ? html`<span class="dot" aria-hidden="true"></span><span class="sr-only">Unread</span>` : nothing}
               </span>
               <span class="body">${c.body}</span>
-              ${count ? html`<span class="count">${plural(count, 'reply', 'replies')}</span>` : nothing}
+              ${count
+                ? html`<span class="count">
+                    <span class="repliers" aria-hidden="true">
+                      ${(this.replyAuthors.get(c.id) ?? []).slice(0, 3).map(
+                        (name) => html`<span class="avatar" style="--c: ${avatarColour(name)}">${initials(name)}</span>`,
+                      )}
+                    </span>
+                    ${plural(count, 'reply', 'replies')}
+                  </span>`
+                : nothing}
             </span>
           </button>
         </li>`
@@ -131,15 +179,23 @@ export class CtSidebar extends LitElement {
     return html`
       <header>
         <h2 id="title">Comments</h2>
-        <span class="header-actions">
-          ${this.resolvedCount
-            ? html`<button class="toggle" aria-pressed=${String(this.showResolved)} @click=${() => this.fire('ct-toggle-resolved')}>
-                ${this.showResolved ? 'Hide resolved' : `Show resolved (${this.resolvedCount})`}
-              </button>`
-            : nothing}
-          <button class="icon-button" aria-label="Close comments list" title="Close" @click=${() => this.fire('ct-close')}>${x}</button>
-        </span>
+        <button class="icon-button" aria-label="Close comments list" title="Close" @click=${() => this.fire('ct-close')}>${x}</button>
       </header>
+      <div class="controls">
+        <select aria-label="Sort comments" @change=${(e: Event) => this.fire('ct-sort', (e.target as HTMLSelectElement).value)}>
+          <option value="unread" ?selected=${this.sort === 'unread'}>Unread first</option>
+          <option value="recent" ?selected=${this.sort === 'recent'}>Most recent</option>
+        </select>
+        <span class="push"></span>
+        ${this.unreadCount
+          ? html`<button class="toggle" @click=${() => this.fire('ct-mark-all-read')}>Mark all as read</button>`
+          : nothing}
+        ${this.resolvedCount
+          ? html`<button class="toggle" aria-pressed=${String(this.showResolved)} @click=${() => this.fire('ct-toggle-resolved')}>
+              ${this.showResolved ? 'Hide resolved' : `Show resolved (${this.resolvedCount})`}
+            </button>`
+          : nothing}
+      </div>
       <section class="scroll" aria-labelledby="title">
         ${empty
           ? html`<p class="empty">No comments yet. Press C to add one.</p>`

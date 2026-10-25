@@ -32,7 +32,7 @@ initFeedback({
 })
 ```
 
-The comment toolbar shows on every page. The × at its end closes comments, leaving a small tab at the bottom of the page that brings them back. Open a page with `?feedback=0` to turn Corktack off completely for that browser tab, and `?feedback=1` to turn it back on. Leave out `adapter` to keep comments in your own browser only.
+The comment toolbar shows on every page. The × at its end closes comments, leaving a small tab at the bottom of the page that brings them back. Open a page with `?feedback=0` to turn Corktack off completely for that browser tab, and `?feedback=1` to turn it back on. New comments from others since you last looked get a blue dot, and the list button shows how many; the list sorts unread first or by most recent. Leave out `adapter` to keep comments in your own browser only.
 
 ## Run a study
 

@@ -15,6 +15,8 @@ export class CtToolbar extends LitElement {
   @property({ type: Boolean }) commenting = false
   @property({ type: Boolean }) visible = true
   @property({ type: Boolean }) listOpen = false
+  /** Unread threads, shown as a count on the list button. */
+  @property({ type: Number }) unread = 0
   @property({ attribute: false }) studies: Array<{ id: string; title: string }> = []
   @state() private menuOpen = false
 
@@ -35,6 +37,23 @@ export class CtToolbar extends LitElement {
         pointer-events: auto;
       }
       .wrap { position: relative; }
+      .badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 4px;
+        border: 2px solid var(--surface);
+        border-radius: 9px;
+        background: var(--accent);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 14px;
+        text-align: center;
+        pointer-events: none;
+      }
       .menu {
         position: absolute;
         right: 0;
@@ -110,7 +129,7 @@ export class CtToolbar extends LitElement {
   ]
 
   /** `pressed` is null for buttons that act once rather than toggle. */
-  private button(action: ToolbarAction, label: string, key: string | null, pressed: boolean | null, icon: unknown) {
+  private button(action: ToolbarAction, label: string, key: string | null, pressed: boolean | null, icon: unknown, badge = 0) {
     return html`<div class="wrap">
       <button
         class=${action}
@@ -119,6 +138,7 @@ export class CtToolbar extends LitElement {
         aria-pressed=${pressed === null ? nothing : String(pressed)}
         @click=${() => this.dispatchEvent(new CustomEvent('ct-action', { detail: action, bubbles: true, composed: true }))}
       >${icon}</button>
+      ${badge ? html`<span class="badge" aria-hidden="true">${badge > 99 ? '99+' : badge}</span>` : nothing}
       <span class="tip" aria-hidden="true">${label}${key ? html`<kbd>${key}</kbd>` : nothing}</span>
     </div>`
   }
@@ -159,7 +179,14 @@ export class CtToolbar extends LitElement {
     return html`
       ${this.button('comment', 'Comment', 'C', this.commenting, messageCircle)}
       ${this.button('visibility', this.visible ? 'Hide comments' : 'Show comments', 'Shift+C', !this.visible, this.visible ? eye : eyeOff)}
-      ${this.button('list', this.listOpen ? 'Hide comments list' : 'Show comments list', null, this.listOpen, list)}
+      ${this.button(
+        'list',
+        `${this.listOpen ? 'Hide comments list' : 'Show comments list'}${this.unread ? ` (${this.unread} unread)` : ''}`,
+        null,
+        this.listOpen,
+        list,
+        this.unread,
+      )}
       <span class="divider" aria-hidden="true"></span>
       ${this.studies.length ? this.studySwitch() : nothing}
       ${this.button('close', 'Turn off comments', null, null, x)}
