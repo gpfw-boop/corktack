@@ -91,7 +91,15 @@ export class CtSidebar extends LitElement {
       }
       .toggle:hover { background: var(--hover); color: var(--text); }
       .scroll { flex: 1; overflow: auto; padding: 8px 8px calc(72px + env(safe-area-inset-bottom, 0px)); }
-      h3 { margin: 16px 8px 4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+      /* Page names and groups are context, not the headline: quiet, so the comments lead. */
+      h3 {
+        margin: 16px 8px 0;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--text-secondary);
+      }
       ul { list-style: none; margin: 0; padding: 0; }
       .item {
         display: grid;
