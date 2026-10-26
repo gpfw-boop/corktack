@@ -152,7 +152,9 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
     hookAttribute: options.hookAttribute ?? 'data-feedback',
     getRoute: options.getRoute ?? defaultRoute,
     studies: Object.entries(studies).map(([id, study]) => ({ id, title: study.title })),
-    onClose: () => {
+    onThreadOpen: options.onOpen,
+    onThreadClose: options.onClose,
+    onTurnOff: () => {
       setClosed(true)
       overlay?.remove()
       overlay = undefined

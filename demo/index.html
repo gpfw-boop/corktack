@@ -127,6 +127,9 @@
     initFeedback({
       project: 'corktack-demo',
       adapter: url && anonKey ? supabaseAdapter({ url, anonKey }) : undefined,
+      // Logged so the thread callbacks can be checked in the console.
+      onOpen: (comment) => console.info('[demo] thread opened', comment.id),
+      onClose: (comment) => console.info('[demo] thread closed', comment.id),
       // Open with ?study=roster to try study mode.
       studies: {
         roster: {

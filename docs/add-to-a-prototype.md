@@ -121,7 +121,32 @@ initFeedback({ project: 'roster-prototype', adapter: supabaseAdapter({ … }), s
 - Check every `goal.url` is a real route, and every `goal.press` exists on the page the task leads to.
 - Write copy in the user's preferred language and spelling.
 
-## 6. Check it works
+## 6. React to a comment opening (only if the prototype needs it)
+
+These options are optional. Existing setups need no change.
+
+Some prototypes change their own state while someone reads a comment, for example showing the screen the way the commenter had it, then putting things back when the comment closes. Use these callbacks for that, rather than reading Corktack's internals, which can change in any update:
+
+```ts
+initFeedback({
+  project: 'roster-prototype',
+  adapter: supabaseAdapter({ … }),
+  onOpen: (comment) => {
+    // A comment's thread has opened: from a pin, the comments list or a comment link,
+    // after Corktack has restored the page it was left on.
+  },
+  onClose: (comment) => {
+    // That thread has closed: its close button, Escape, clicking away, the thread being
+    // deleted, or comments being turned off.
+  },
+})
+```
+
+- Opening another thread while one is open calls `onClose` for the first, then `onOpen` for the second.
+- `comment` is the top-level comment: its `id`, `author`, `body`, `route`, `createdAt` and so on.
+- If a callback throws, Corktack logs a warning and carries on.
+
+## 7. Check it works
 
 Start the dev server and open the prototype.
 
@@ -131,7 +156,7 @@ Start the dev server and open the prototype.
 - For a study, open `?study=<id>` and run through each task. Check each goal finishes its task. `?study=off` ends it.
 - The browser console should show no `[corktack]` warnings. A warning about loading comments usually means the environment variables are missing; restart the dev server after editing `.env.local`.
 
-## 7. Deploy
+## 8. Deploy
 
 Tell the user to add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to their host's environment variables (on Vercel: Settings, then Environment Variables, for Production and Preview), then redeploy. Commit the lockfile so the host installs the same version of Corktack.
 

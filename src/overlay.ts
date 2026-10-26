@@ -31,7 +31,10 @@ export interface OverlayConfig {
   /** Swaps the comments for a study. */
   onSwitchToStudy: (id: string) => void
   /** Hides comments, leaving the small tab that brings them back. */
-  onClose: () => void
+  onTurnOff: () => void
+  /** The prototype's callbacks for a thread's card opening and closing. */
+  onThreadOpen?: (comment: FeedbackComment) => void
+  onThreadClose?: (comment: FeedbackComment) => void
 }
 
 type Point = { x: number; y: number }
@@ -87,6 +90,8 @@ export class CorktackOverlay extends LitElement {
   private recorder!: ViewRecorder
   /** True while reopening a comment's view, so its presses reach the page. */
   private replaying = false
+  /** The thread whose card is open, as last told to the prototype's onOpen. */
+  private openThread: FeedbackComment | null = null
   /** Increases with each comment opened, so a slow open gives way to a newer one. */
   private opening = 0
 
@@ -165,6 +170,8 @@ export class CorktackOverlay extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback()
+    // Comments turned off or swapped for a study: the open thread closes.
+    this.syncOpenThread(null)
     this.teardown.forEach((fn) => fn())
     this.teardown = []
     document.documentElement.removeAttribute('data-corktack-commenting')
@@ -349,7 +356,7 @@ export class CorktackOverlay extends LitElement {
     if (action === 'comment') this.setCommenting(!this.commenting)
     if (action === 'visibility') this.setVisible(!this.visible)
     if (action === 'list') this.listOpen = !this.listOpen
-    if (action === 'close') this.config.onClose()
+    if (action === 'close') this.config.onTurnOff()
     if (action === 'study' && this.config.studies.length === 1) this.config.onSwitchToStudy(this.config.studies[0].id)
   }
 
@@ -429,7 +436,33 @@ export class CorktackOverlay extends LitElement {
     if (changed.has('comments' as keyof CorktackOverlay) || changed.has('card' as keyof CorktackOverlay)) this.schedule()
   }
 
+  /**
+   * Tells the prototype when a thread's card opens or closes. Opening B while
+   * A is open closes A first. Their errors are caught, so a broken callback
+   * can't break comments.
+   */
+  private syncOpenThread(id: string | null): void {
+    if (id === (this.openThread?.id ?? null)) {
+      // Same thread: keep the latest copy, so onClose gets current data.
+      if (id) this.openThread = this.comments.find((c) => c.id === id) ?? this.openThread
+      return
+    }
+    const call = (fn: ((c: FeedbackComment) => void) | undefined, c: FeedbackComment, name: string) => {
+      try {
+        fn?.(c)
+      } catch (e) {
+        console.warn(`[corktack] ${name} threw`, e)
+      }
+    }
+    if (this.openThread) call(this.config.onThreadClose, this.openThread, 'onClose')
+    this.openThread = (id && this.comments.find((c) => c.id === id)) || null
+    if (this.openThread) call(this.config.onThreadOpen, this.openThread, 'onOpen')
+  }
+
   protected updated(changed: PropertyValues<this>): void {
+    if (changed.has('card' as keyof CorktackOverlay) || changed.has('comments' as keyof CorktackOverlay)) {
+      this.syncOpenThread(this.card.kind === 'thread' ? this.card.id : null)
+    }
     this.positionCard()
     // Focus the field, except for threads on touch screens, where it would pop up the keyboard.
     const focusable = this.card.kind === 'compose' || (this.card.kind === 'thread' && window.matchMedia('(hover: hover)').matches)

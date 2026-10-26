@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Study } from '../src/types'
 
 // Stand-in for the overlay, which loads Lit; these tests are about when it shows and switching modes.
-const mounted: Array<{ studies: Array<{ id: string; title: string }>; onSwitchToStudy: (id: string) => void; onClose: () => void }> = []
+const mounted: Array<{ studies: Array<{ id: string; title: string }>; onSwitchToStudy: (id: string) => void; onTurnOff: () => void }> = []
 vi.mock('../src/overlay', () => ({
   mountOverlay: (config: (typeof mounted)[number]) => {
     mounted.push(config)
@@ -64,7 +64,7 @@ describe('closing comments with the toolbar’s ×', () => {
   it('leaves a tab that brings them back', async () => {
     stop = initFeedback()
     await settle()
-    mounted[0].onClose()
+    mounted[0].onTurnOff()
     expect(overlay()).toBeNull()
     expect(tab()).not.toBeNull()
 
@@ -77,7 +77,7 @@ describe('closing comments with the toolbar’s ×', () => {
   it('stays closed across a reload, until ?feedback=1', async () => {
     stop = initFeedback()
     await settle()
-    mounted[0].onClose()
+    mounted[0].onTurnOff()
     stop()
 
     stop = initFeedback()

@@ -108,6 +108,17 @@ export interface FeedbackOptions {
   /** @deprecated No longer used: comments are always on unless the page is opened with ?feedback=0. */
   launcher?: boolean
   /**
+   * Called when a comment thread's card opens: from a pin, the comments list
+   * or a comment link, after its view has been restored.
+   */
+  onOpen?: (comment: FeedbackComment) => void
+  /**
+   * Called when that card closes: its close button, Escape, clicking away,
+   * opening another thread (onClose for the old one comes first), the thread
+   * being deleted, or comments being turned off.
+   */
+  onClose?: (comment: FeedbackComment) => void
+  /**
    * Studies to take participants through, keyed by id. Open one with
    * ?study=<id>, or switch to it from the toolbar. Comments are hidden while a
    * study runs. ?study=off ends it.
