@@ -62,6 +62,23 @@ describe('schema.sql', () => {
     ).rejects.toThrow(/check constraint/)
   })
 
+  it('stores context on comments only, within a size limit', async () => {
+    const context = JSON.stringify({ shiftSwaps: 'on', week: '2' })
+    const [{ id }] = await asAnon<{ id: string }>(
+      `insert into public.comments (project, route, author, body, anchor, context)
+       values ('demo', '/', 'Sam', 'Hi', $1::jsonb, $2::jsonb) returning id`, [ANCHOR, context])
+    const [row] = await asAnon<{ context: unknown }>('select context from public.comments where id = $1', [id])
+    expect(row.context).toEqual(JSON.parse(context))
+    await expect(
+      asAnon(`insert into public.comments (project, parent_id, route, author, body, context)
+              values ('demo', $1, '/', 'Sam', 'Reply', $2::jsonb)`, [id, context]),
+    ).rejects.toThrow(/comments_context_top_level/)
+    await expect(
+      asAnon(`insert into public.comments (project, route, author, body, anchor, context)
+              values ('demo', '/', 'Sam', 'Hi', $1::jsonb, $2::jsonb)`, [ANCHOR, JSON.stringify({ big: 'x'.repeat(5000) })]),
+    ).rejects.toThrow(/check constraint/)
+  })
+
   it('lets anon add and read comments', async () => {
     const id = await addComment()
     const rows = await asAnon('select id, author, body, resolved_at from public.comments where id = $1', [id])

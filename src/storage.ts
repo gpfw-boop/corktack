@@ -6,8 +6,8 @@ const PREFIX = 'corktack:comments:'
 const read = (project: string): FeedbackComment[] => {
   try {
     const parsed = JSON.parse(localStorage.getItem(PREFIX + project) ?? '[]')
-    // Comments saved by earlier versions have no resolvedAt or view.
-    return Array.isArray(parsed) ? parsed.map((c) => ({ resolvedAt: null, view: null, ...c })) : []
+    // Comments saved by earlier versions have no resolvedAt, view or context.
+    return Array.isArray(parsed) ? parsed.map((c) => ({ resolvedAt: null, view: null, context: null, ...c })) : []
   } catch {
     return []
   }

@@ -10,6 +10,7 @@ const row = {
   anchor: { selector: 'main', strategy: 'path', tag: 'main', xPct: 0.5, yPct: 0.5, pageX: 0, pageY: 0 },
   viewport_width: 1280, created_at: '2026-10-07T00:00:00Z', resolved_at: null,
   view: { url: '/?tab=2', steps: [] },
+  context: { flags: 'swaps' },
 }
 
 function query(): any {
@@ -64,10 +65,12 @@ describe('supabaseAdapter', () => {
       id: 'c1', project: 'demo', parentId: null, route: '/', author: 'Priya', body: 'Hi',
       anchor: row.anchor, viewportWidth: 1280, createdAt: '2026-10-07T00:00:00Z', resolvedAt: null,
       view: { url: '/?tab=2', steps: [] },
+      context: { flags: 'swaps' },
     }])
     const select = calls.find((c) => c.op === 'select')!.args[0] as string
     expect(select).toContain('resolved_at')
     expect(select).toContain('view')
+    expect(select).toContain('context')
     expect(select).not.toContain('*')
     expect(calls.find((c) => c.op === 'eq')!.args).toEqual(['project', 'demo'])
   })
@@ -75,10 +78,10 @@ describe('supabaseAdapter', () => {
   it('inserts only the columns clients may set', async () => {
     await adapter().create({
       project: 'demo', parentId: null, route: '/', author: 'Priya', body: 'Hi',
-      anchor: row.anchor as never, viewportWidth: 1280, view: row.view,
+      anchor: row.anchor as never, viewportWidth: 1280, view: row.view, context: row.context,
     })
     const inserted = calls.find((c) => c.op === 'insert')!.args[0] as Record<string, unknown>
-    expect(Object.keys(inserted).sort()).toEqual(['anchor', 'author', 'body', 'parent_id', 'project', 'route', 'view', 'viewport_width'])
+    expect(Object.keys(inserted).sort()).toEqual(['anchor', 'author', 'body', 'context', 'parent_id', 'project', 'route', 'view', 'viewport_width'])
   })
 
   it('deletes and resolves through the RPCs, reporting errors', async () => {

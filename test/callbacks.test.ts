@@ -62,6 +62,28 @@ describe('onOpen and onClose', () => {
     expect(closed).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
   })
 
+  it('saves getContext with a new comment and hands it back in onOpen', async () => {
+    const opened: FeedbackComment[] = []
+    stop = initFeedback({
+      project: 'demo',
+      adapter: localAdapter(),
+      getContext: () => ({ shiftSwaps: 'on', count: 3 as unknown as string }),
+      onOpen: (c) => opened.push(c),
+    })
+    await vi.waitFor(() => expect(overlay()).not.toBeNull())
+    await vi.waitFor(() => expect((overlay() as unknown as { comments: unknown[] }).comments).toHaveLength(2))
+
+    const el = document.querySelector('main')!
+    await openCard({ kind: 'compose', el, anchor, view: { url: '/', steps: [] } })
+    await (overlay() as unknown as { post: (n: string, b: string, p: null) => Promise<void> }).post('Gil', 'With state', null)
+    const saved = JSON.parse(localStorage.getItem('corktack:comments:demo')!).find((c: FeedbackComment) => c.body === 'With state')
+    // Strings only: the number is left out.
+    expect(saved.context).toEqual({ shiftSwaps: 'on' })
+
+    await openCard({ kind: 'thread', id: saved.id })
+    expect(opened.at(-1)?.context).toEqual({ shiftSwaps: 'on' })
+  })
+
   it('keeps going when a callback throws', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     stop = initFeedback({ project: 'demo', adapter: localAdapter(), onOpen: () => { throw new Error('boom') } })

@@ -154,6 +154,7 @@ export function initFeedback(options: FeedbackOptions = {}): () => void {
     studies: Object.entries(studies).map(([id, study]) => ({ id, title: study.title })),
     onThreadOpen: options.onOpen,
     onThreadClose: options.onClose,
+    getContext: options.getContext,
     onTurnOff: () => {
       setClosed(true)
       overlay?.remove()

@@ -6,7 +6,7 @@ import type { NewComment } from '../src/types'
 const anchor = { selector: 'main', strategy: 'path' as const, tag: 'main', xPct: 0.5, yPct: 0.5, pageX: 0, pageY: 0 }
 const comment = (over: Partial<NewComment> = {}): NewComment => ({
   project: 'demo', parentId: null, route: '/', author: 'Priya', body: 'Hello',
-  anchor, viewportWidth: 1280, view: { url: '/?tab=2', steps: [] }, ...over,
+  anchor, viewportWidth: 1280, view: { url: '/?tab=2', steps: [] }, context: null, ...over,
 })
 
 beforeEach(() => localStorage.clear())
@@ -22,16 +22,16 @@ describe('localAdapter', () => {
   })
 
   it('reads comments saved by earlier versions', async () => {
-    const { resolvedAt: _, view: __, ...old } = await localAdapter().create(comment())
+    const { resolvedAt: _, view: __, context: ___, ...old } = await localAdapter().create(comment())
     localStorage.setItem('corktack:comments:demo', JSON.stringify([old]))
-    expect(await localAdapter().list('demo')).toEqual([{ ...old, resolvedAt: null, view: null }])
+    expect(await localAdapter().list('demo')).toEqual([{ ...old, resolvedAt: null, view: null, context: null }])
   })
 
   it('deletes a reply alone, or a comment with its replies', async () => {
     const db = localAdapter()
     const parent = await db.create(comment())
-    const reply = await db.create(comment({ parentId: parent.id, anchor: null, viewportWidth: null, view: null }))
-    await db.create(comment({ parentId: parent.id, anchor: null, viewportWidth: null, view: null }))
+    const reply = await db.create(comment({ parentId: parent.id, anchor: null, viewportWidth: null, view: null, context: null }))
+    await db.create(comment({ parentId: parent.id, anchor: null, viewportWidth: null, view: null, context: null }))
     await db.remove(reply.id)
     expect(await db.list('demo')).toHaveLength(2)
     await db.remove(parent.id)
@@ -41,7 +41,7 @@ describe('localAdapter', () => {
   it('resolves and reopens top-level comments only', async () => {
     const db = localAdapter()
     const parent = await db.create(comment())
-    const reply = await db.create(comment({ parentId: parent.id, anchor: null, viewportWidth: null, view: null }))
+    const reply = await db.create(comment({ parentId: parent.id, anchor: null, viewportWidth: null, view: null, context: null }))
     await db.setResolved(parent.id, true)
     await db.setResolved(reply.id, true)
     const [p, r] = await db.list('demo')

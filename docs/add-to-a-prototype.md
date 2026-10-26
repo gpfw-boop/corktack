@@ -146,6 +146,24 @@ initFeedback({
 - `comment` is the top-level comment: its `id`, `author`, `body`, `route`, `createdAt` and so on.
 - If a callback throws, Corktack logs a warning and carries on.
 
+To save the prototype's own state with each comment (which features were switched on, a selected record), add `getContext`. It's called when a comment is posted, and what it returns comes back as `comment.context` in `onOpen`. That keeps the state out of the page address:
+
+```ts
+initFeedback({
+  project: 'roster-prototype',
+  adapter: supabaseAdapter({ … }),
+  getContext: () => ({ shiftSwaps: String(features.shiftSwaps), view: currentView }),
+  onOpen: (comment) => {
+    if (comment.context) applyFeatures(comment.context)
+  },
+  onClose: () => restoreMyFeatures(),
+})
+```
+
+- Values must be strings; anything else is left out. Keep it small (under about 4,000 characters in all).
+- `context` is `null` for replies, for comments left before `getContext` was added, and for prototypes that don't use it, so check for it before using it.
+- With Supabase, this needs the `context` column from the current `schema.sql`. Run it again in the SQL editor if the project was set up before this option existed.
+
 ## 7. Check it works
 
 Start the dev server and open the prototype.

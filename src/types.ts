@@ -46,6 +46,11 @@ export interface FeedbackComment {
   viewportWidth: number | null
   /** How to reopen the view the comment was left in. Null for replies and older comments. */
   view: CommentView | null
+  /**
+   * The prototype's own state when the comment was left, from `getContext`.
+   * Null for replies, older comments, and prototypes that don't use it.
+   */
+  context: Record<string, string> | null
   createdAt: string
   /** When the thread was marked done, or null while it's open. Always null for replies. */
   resolvedAt: string | null
@@ -118,6 +123,14 @@ export interface FeedbackOptions {
    * being deleted, or comments being turned off.
    */
   onClose?: (comment: FeedbackComment) => void
+  /**
+   * Called when a top-level comment is posted. Whatever it returns is saved
+   * with the comment as `context` and comes back in `onOpen`, so a prototype
+   * can keep its own state (feature flags, a selected record) with each
+   * comment without putting it in the address. Strings only; other values
+   * are left out.
+   */
+  getContext?: () => Record<string, string>
   /**
    * Studies to take participants through, keyed by id. Open one with
    * ?study=<id>, or switch to it from the toolbar. Comments are hidden while a

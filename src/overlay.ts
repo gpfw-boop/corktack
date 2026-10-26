@@ -35,6 +35,7 @@ export interface OverlayConfig {
   /** The prototype's callbacks for a thread's card opening and closing. */
   onThreadOpen?: (comment: FeedbackComment) => void
   onThreadClose?: (comment: FeedbackComment) => void
+  getContext?: () => Record<string, string>
 }
 
 type Point = { x: number; y: number }
@@ -295,6 +296,7 @@ export class CorktackOverlay extends LitElement {
       anchor: parentId ? null : compose!.anchor,
       viewportWidth: parentId ? null : window.innerWidth,
       view: parentId ? null : compose!.view,
+      context: parentId ? null : this.context(),
     })
     // Realtime may already have delivered it.
     if (!this.comments.some((c) => c.id === created.id)) this.comments = [...this.comments, created]
@@ -434,6 +436,19 @@ export class CorktackOverlay extends LitElement {
       if (thread) this.markRead([thread])
     }
     if (changed.has('comments' as keyof CorktackOverlay) || changed.has('card' as keyof CorktackOverlay)) this.schedule()
+  }
+
+  /** The prototype's state to save with a new comment: string values only, or null. */
+  private context(): Record<string, string> | null {
+    try {
+      const raw = this.config.getContext?.()
+      if (!raw || typeof raw !== 'object') return null
+      const entries = Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === 'string')
+      return entries.length ? Object.fromEntries(entries) : null
+    } catch (e) {
+      console.warn('[corktack] getContext threw', e)
+      return null
+    }
   }
 
   /**

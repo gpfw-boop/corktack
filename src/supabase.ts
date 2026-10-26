@@ -22,9 +22,10 @@ interface Row {
   created_at: string
   resolved_at: string | null
   view: CommentView | null
+  context: Record<string, string> | null
 }
 
-const COLUMNS = 'id, project, parent_id, route, author, body, anchor, viewport_width, created_at, resolved_at, view'
+const COLUMNS = 'id, project, parent_id, route, author, body, anchor, viewport_width, created_at, resolved_at, view, context'
 
 const fromRow = (row: Row): FeedbackComment => ({
   id: row.id,
@@ -38,6 +39,7 @@ const fromRow = (row: Row): FeedbackComment => ({
   createdAt: row.created_at,
   resolvedAt: row.resolved_at,
   view: row.view ?? null,
+  context: row.context ?? null,
 })
 
 /**
@@ -78,6 +80,7 @@ export function supabaseAdapter({ url, anonKey, table = 'comments' }: SupabaseAd
           anchor: comment.anchor,
           viewport_width: comment.viewportWidth,
           view: comment.view,
+          context: comment.context,
         })
         .select(COLUMNS)
         .single()
